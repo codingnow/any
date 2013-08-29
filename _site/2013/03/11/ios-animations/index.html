@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en-us">
+  <head>
+    <meta http-equiv="content-type" content="text/html; charset=utf-8" />
+    <meta name="author" content="webfrogs" />
+    <title>IOS官方文档阅读之动画 | webfrogs</title>
+    <link rel="shortcut icon" href="/favicon.ico">
+    <link href="/feed/" rel="alternate" title="webfrogs" type="application/atom+xml" />
+    <link rel="stylesheet" href="/media/css/style.css">
+    <link rel="stylesheet" href="/media/css/highlight.css">
+    <script type="text/javascript" src="/media/js/jquery-1.7.1.min.js"></script>
+  </head>
+  <script type="text/javascript">
+    function setTimeSpan(){
+    	var date = new Date();
+    	timeSpan.innerText=date.format('yyyy-MM-dd hh:mm:ss');
+    }
+    
+    Date.prototype.format = function(format)
+		{
+    var o =
+    	{
+    	    "M+" : this.getMonth()+1, //month
+    	    "d+" : this.getDate(),    //day
+    	    "h+" : this.getHours(),   //hour
+    	    "m+" : this.getMinutes(), //minute
+    	    "s+" : this.getSeconds(), //second
+    	    "q+" : Math.floor((this.getMonth()+3)/3),  //quarter
+    	    "S" : this.getMilliseconds() //millisecond
+    	}
+    	if(/(y+)/.test(format))
+    	format=format.replace(RegExp.$1,(this.getFullYear()+"").substr(4 - RegExp.$1.length));
+    	for(var k in o)
+    	if(new RegExp("("+ k +")").test(format))
+    	format = format.replace(RegExp.$1,RegExp.$1.length==1 ? o[k] : ("00"+ o[k]).substr((""+ o[k]).length));
+    	return format;
+		}
+  </script>
+  <body onLoad="setInterval(setTimeSpan,1000);">
+    <div id="container">
+      <div id="main" role="main">
+        <header>
+        <h1>IOS官方文档阅读之动画</h1>
+        </header>
+        <nav>
+        <span><a title="home page" class="" href="/">Home</a></span>
+        <span><a title="about" class="" href="/about/">About</a></span>
+        <span><a title="guestbook" class="" href="/guestbook/">Guestbook</a></span>
+        <span><a title="categories" class="" href="/categories/">Categories</a></span>
+        <span><a title="tags" class="" href="/tags/">Tags</a></span>
+        <span><a title="links" class="" href="/links/">Links</a></span>
+        <span><a title="subscribe by RSS" class="" href="/feed/">Subscribe</a></span>
+        </nav>
+        <article class="content">
+        <section class="post">
+<h3>写于开头</h3>
+
+<hr />
+
+<p>最近开始阅读苹果IOS开发文档，发现果然还是官方文档里有价值的东西多。之后会随着阅读的进度，陆续写一些的阅读文章，大部分是文档内容的摘录（英文不太好，有些地方翻译会有些生硬）。将所看到的有帮助的文档中的内容记录下来，也算是一种总结。</p>
+
+<p>本文所对应的官方文档：<a href="http://developer.apple.com/library/ios/#documentation/windowsviews/conceptual/viewpg_iphoneos/Introduction/Introduction.html#//apple_ref/doc/uid/TP40009503-CH1-SW2">《View Programming Guide for iOS》</a>
+其中的Animations部分。</p>
+
+<h3>动画</h3>
+
+<hr />
+
+<h5>什么能够使用动画</h5>
+
+<p>UIKit框架和Core Animation都提供了对动画的支持，但是这两种技术对动画的支持程度有所不同。UIKit框架是通过UIView对象来支持动画的。UIView包含了一些支持动画的属性，但这并不意味着动画会自动产生。改变这些属性通常只是立即更新UIView对象的属性值，并不会有动画产生。想要使这些改变产生动画，你必须在一个动画块中改变这些属性值。</p>
+
+<p>以下列出UIView中支持动画的属性:</p>
+
+<ul>
+<li>frame</li>
+<li>bounds</li>
+<li>center</li>
+<li>transform</li>
+<li>alpha</li>
+<li>backgroundColor</li>
+<li>contentStretch</li>
+</ul>
+
+
+<p>在一些需要展示更复杂动画或者不被UIView类所支持的动画的场合，能够使用Core Animation和视图下面的图层来创建动画。由于视图和图层对象是错综联系在一起的，所以改变视图的涂层会影响到视图本身。使用Core Animation，你能为一下视图图层的改变添加动画：</p>
+
+<ul>
+<li>图层的大小和位置</li>
+<li>执行变形时的中心点</li>
+<li>3D空间中图层以及其子图层的变形</li>
+<li>图层从其所在图层层级中的添加或者删除</li>
+<li>图层与其兄弟图层间的Z-order关系</li>
+<li>图层的阴影</li>
+<li>图层的边框(包括图层是否圆角)</li>
+<li>改变大小操作中图层部分的拉伸</li>
+<li>图层的不透明度</li>
+<li>子图层在父图层边框以外部分的裁剪行为</li>
+<li>图层当前的内容</li>
+<li>图层的光栅化行为</li>
+</ul>
+
+
+<p><strong>注意：</strong>如果视图包含了自定义的图层对象——也就是说，图层对象没有关联的视图——任何该图层的变化动画，都必须使用Core Animation来完成。</p>
+
+<h5>视图动画属性的改变</h5>
+
+<p>UIView类对象属性改变所产生动画的代码写法有两种：如果在iOS4以后的系统，可以使用代码块对象，更早的系统中可以使用Begin/Commit函数。</p>
+
+<p>代码块可以使用的函数：</p>
+
+<ul>
+<li>animateWithDuration:animations:</li>
+<li>animateWithDuration:animations:completion:</li>
+<li>animateWithDuration:delay:options:animations:completion:</li>
+</ul>
+
+
+<p>以上这些函数，都是UIView的类函数。正是由于是类函数，在其中的动画块代码不仅仅只展示单一的视图，可以包含多个视图的变化。</p>
+
+<p>如果应用程序是运行在iOS3.2及更早的版本，需要使用UIView的以下两个类函数：</p>
+
+<pre><code>beginAnimations:context: 
+commitAnimations
+</code></pre>
+
+<p>来定义动画代码块。这两个函数标记了动画代码块的开始和结束位置。</p>
+
+<p><strong>注意：</strong>如果所写的应用程序是运行在iOS4及以上的环境中，应该使用基于块的函数</p>
+
+<p>默认情况下，在一个动画块中所有动画属性的改变都会被展示。如果只希望其中一部分的变化以动画来表示，其余的不用。那么使用<em>setAnimationsEnabled:</em>函数可以暂时使动画失效，之后做任何不想使用动画的改变，然后再调用一次<em>setAnimationsEnabled:</em>函数来启用动画。还能通过调用<em>areAnimationsEnabled</em>函数来查看当前动画的可用状态。</p>
+
+<h5>为Begin/Commit函数配置参数</h5>
+
+<p>Begin/Commit函数有许多动画参数可以配置，需要通过使用UIView的一些类函数来完成。</p>
+
+<p>配置参数的函数列表详见文档。</p>
+
+<h5>设置动画代理</h5>
+
+<p>如果希望在一段动画结束之后立即执行一段代码，需要为Begin/Commit函数关联一个代理对象和一个开始或者结束的选择器。通过UIView的类函数<em>setAnimationDelegate:</em>设置代理对象，类函数<em>setAnimationWillStartSelector:</em>和<em>setAnimationDidStopSelector:</em>设置开始结束选择器。</p>
+
+<p>动画代理方法应该与以下形式类似：</p>
+
+<pre><code>- (void)animationWillStart:(NSString *)animationID context:(void *)context;
+- (void)animationDidStop:(NSString *)animationID finished:(NSNumber *)finished context:(void *)context;
+</code></pre>
+
+<h5>改变一个视图的子视图</h5>
+
+<p>当一个视图的子视图发生改变时，若需要动画来过渡，则需要使用函数<em>transitionWithView:duration:options:animations:completion:</em>来完成。</p>
+
+<h5>使用一个视图来替换另一个视图</h5>
+
+<p>当使用一个视图来替换另一个视图时，若需要动画过渡，则需要使用函数<em>transitionFromView:toView:duration:options:completion:</em>来完成</p>
+
+<h5>其他</h5>
+
+<p>可以使用完成块或者代理函数来完成多个动画的连接。</p>
+
+<p>基于视图和基于图层的动画可以混合在一起使用。</p>
+
+</section>
+<section class="meta">
+
+<br/>
+<br/>
+<span>
+	<a  href="http://webfrogs.github.com/2013/02/18/ios-automation/" class="pageNav"  >Previous</a>
+	&nbsp;&nbsp;&nbsp;
+	<a  href="http://webfrogs.github.com/2013/03/13/read-note-view/" class="pageNav"  >Next</a>
+</span>
+<hr>
+<span class="author">
+  <a href="http://webfrogs.github.com">webfrogs</a>
+</span>
+<span class="time">
+  /
+  <time datetime="2013-03-11">2013-03-11</time>
+</span>
+<br />
+<span class="license">
+  Published under <a rel="license" href="http://creativecommons.org/licenses/by-nc-sa/3.0/">(CC) BY-NC-SA</a>
+</span>
+
+<span class="categories">
+  in categories
+  
+  <a href="/categories/#ios" title="ios">ios</a>&nbsp;
+  
+</span>
+
+
+<span class="tags">
+  tagged with 
+  
+  <a href="/tags/#iOS" title="iOS">iOS</a>&nbsp;
+  
+</span>
+
+</section>
+<!-- Duoshuo Comment BEGIN -->
+	<div class="ds-thread"></div>
+	<script type="text/javascript">
+	var duoshuoQuery = {short_name:"webfrogs"};
+	(function() {
+		var ds = document.createElement('script');
+		ds.type = 'text/javascript';ds.async = true;
+		ds.src = 'http://static.duoshuo.com/embed.js';
+		ds.charset = 'UTF-8';
+		(document.getElementsByTagName('head')[0] 
+		|| document.getElementsByTagName('body')[0]).appendChild(ds);
+	})();
+	</script>
+<!-- Duoshuo Comment END -->
+<!--
+<script type="text/javascript">
+$(function(){
+  $(document).keydown(function(e) {
+    var url = false;
+        if (e.which == 37 || e.which == 74) {  // Left arrow and J
+            
+        url = 'http://webfrogs.github.com/2013/02/18/ios-automation/';
+        
+        }
+        else if (e.which == 39 || e.which == 75) {  // Right arrow and K
+            
+        url = 'http://webfrogs.github.com/2013/03/13/read-note-view/';
+        
+        }
+        if (url) {
+            window.location = url;
+        }
+  });
+})
+</script>
+-->
+
+
+        </article>
+      </div>
+
+    <footer>
+        <p><small>Powered by <a href="https://github.com/mojombo/jekyll">Jekyll</a> & <a href="http://pages.github.com">GitHub</a> | Copyright 2012 - 2013 by <a href="/about/">webfrogs</a> | <span class="label label-info" id="timeSpan"></span></small></p>
+    </footer>
+
+    </div>
+
+    <script type="text/javascript">
+      var _gaq = _gaq || [];
+      _gaq.push(['_setAccount', 'UA-34960818-1']);
+      _gaq.push(['_trackPageview']);
+      (function() {
+        var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+        ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+        var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+      })();
+    </script>
+
+    <!-- Baidu Button BEGIN -->
+		<script type="text/javascript" id="bdshare_js" data="type=slide&amp;img=4&amp;pos=right&amp;uid=541841" ></script>
+		<script type="text/javascript" id="bdshell_js"></script>
+		<script type="text/javascript">
+		var bds_config={"bdTop":170};
+		document.getElementById("bdshell_js").src = "http://bdimg.share.baidu.com/static/js/shell_v2.js?cdnversion=" + Math.ceil(new Date()/3600000);
+		</script>
+		<!-- Baidu Button END -->
+  </body>
+</html>

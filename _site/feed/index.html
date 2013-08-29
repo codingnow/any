@@ -1,0 +1,1529 @@
+<?xml version="1.0" encoding="utf-8"?>
+  <rss version="2.0"
+        xmlns:content="http://purl.org/rss/1.0/modules/content/"
+        xmlns:atom="http://www.w3.org/2005/Atom"
+  >
+  <channel>
+    <title>webfrogs</title>
+    <link href="http://webfrogs.github.com/feed/" rel="self" />
+    <link href="http://webfrogs.github.com" />
+    <lastBuildDate>2013-08-29T17:18:58+08:00</lastBuildDate>
+    <webMaster>ccf.developer@gmail.com</webMaster>
+    
+    <item>
+      <title>Objc的底层并发API</title>
+      <link href="http://webfrogs.github.com/2013/07/18/low-level_concurrency_apis/"/>
+      <pubDate>2013-07-18T00:00:00+08:00</pubDate>
+      <author>webfrogs</author>
+      <guid>http://webfrogs.github.com/2013/07/18/low-level_concurrency_apis</guid>
+      <content:encoded><![CDATA[<p>本文由<a href="http://webfrogs.me/">webfrogs</a>译自<a href="http://www.objc.io/issue-2/low-level-concurrency-apis.html">objc.io</a>，原文作者<a href="https://twitter.com/danielboedewadt">Daniel Eggert</a>。转载请注明出处！</p>
+
+<h2>小引</h2>
+
+<hr />
+
+<p>本篇英文原文所发布的站点<a href="http://www.objc.io/">objc.io</a>是一个专门为iOS和OS X开发者提供的深入讨论技术的平台，文章含金量很高。这个平台每月发布一次，每次都会有数篇文章针对同一个特殊的主题的不同方面来深入讨论。本月的主题是“并发编程”，本文翻译的正是其中的第4篇文章。</p>
+
+<p>翻译此文是受到了<a href="http://weibo.com/beyondvincent">破船</a>的启发。他已经将objc.io本月主题的第二篇文章翻译完成了。  <br/>
+<a href="http://beyondvincent.com/2013/07/16/concurrent-programming-apis-and-challenges/">《OC中并发编程的相关API和面临的挑战(1)》</a>   <br/>
+<a href="http://beyondvincent.com/2013/07/17/concurrent-programming-apis-and-challenges-2/">《OC中并发编程的相关API和面临的挑战(2)》</a></p>
+
+<p>首次翻译文章，水平有限，欢迎指正。</p>
+
+<h2>目录</h2>
+
+<hr />
+
+<p>1、<a href="#once_upon_a_time">从前。。。</a>  <br/>
+2、<a href="#delaying_after">延后执行</a>  <br/>
+3、<a href="#queues">队列</a>  <br/>
+&nbsp;&nbsp;&nbsp;&nbsp;3.1、<a href="#target_queue">标记队列</a> <br/>
+&nbsp;&nbsp;&nbsp;&nbsp;3.2、<a href="#priorities">优先级</a>  <br/>
+4、<a href="#isolation">孤立队列</a>  <br/>
+&nbsp;&nbsp;&nbsp;&nbsp;4.1、<a href="#protecting_a_resource">资源保护</a>  <br/>
+&nbsp;&nbsp;&nbsp;&nbsp;4.2、<a href="#multiple_readers_single_writer">单一资源的多读单写</a>  <br/>
+&nbsp;&nbsp;&nbsp;&nbsp;4.3、<a href="#contention">锁竞争</a>  <br/>
+&nbsp;&nbsp;&nbsp;&nbsp;4.4、<a href="#fully_async">全都使用异步分发</a>  <br/>
+&nbsp;&nbsp;&nbsp;&nbsp;4.5、<a href="#write_good_async_api">如何写出好的异步API</a>  <br/>
+5、<a href="#iterative_execution">迭代执行</a>  <br/>
+6、<a href="#groups">组</a>  <br/>
+&nbsp;&nbsp;&nbsp;&nbsp;6.1、<a href="#with_existing_api">对现有API使用<em>dispatch_group_t</em></a>  <br/>
+7、<a href="#sources">事件源</a>  <br/>
+&nbsp;&nbsp;&nbsp;&nbsp;7.1、<a href="#watching_processes">监视进程</a>  <br/>
+&nbsp;&nbsp;&nbsp;&nbsp;7.2、<a href="#watching_files">监视文件</a>  <br/>
+&nbsp;&nbsp;&nbsp;&nbsp;7.3、<a href="#timers">定时器</a>  <br/>
+&nbsp;&nbsp;&nbsp;&nbsp;7.4、<a href="#canceling">取消</a>  <br/>
+8、<a href="#input_output">输入输出</a>  <br/>
+&nbsp;&nbsp;&nbsp;&nbsp;8.1、<a href="#gcd_and_buffers">GCD和缓冲区</a>  <br/>
+&nbsp;&nbsp;&nbsp;&nbsp;8.2、<a href="reading_and_writing">读和写</a>  <br/>
+9、<a href="#benchmarking">基准测试</a>  <br/>
+10、<a href="#atomic_operations">原子操作</a>  <br/>
+&nbsp;&nbsp;&nbsp;&nbsp;10.1、<a href="#counters">计数器</a>  <br/>
+&nbsp;&nbsp;&nbsp;&nbsp;10.2、<a href="#compare_and_swap">比较和交换</a>  <br/>
+&nbsp;&nbsp;&nbsp;&nbsp;10.3、<a href="#atomic_queues">原子队列</a>  <br/>
+&nbsp;&nbsp;&nbsp;&nbsp;10.4、<a href="#spin_locks">自旋锁</a></p>
+
+<h2>正文</h2>
+
+<hr />
+
+<p>这篇文章里，我们将会讨论一些iOS和OS X都可以使用的底层API。除了<em>dispatch_once</em>，我们一般不鼓励使用其中的任何一种技术。</p>
+
+<p>但是我们想要揭示出表面之下深层次的一些可利用的方面。这些底层的API提供了大量的灵活性，但是伴随着灵活性而来的却是程序复杂度的提升和我们对代码的更多责任。在我们的文章<a href="http://www.objc.io/issue-2/common-background-practices.html">《common background practices》</a>中提到的高层次的API和模式能够让你专注于手头的任务并且免于大量的问题。并且通常来说，高层次的API会提供更好的性能，除非你能负担的起使用底层API带来的纠结和调试代码的时间和努力。</p>
+
+<p>尽管如此，了解深层次下的软件堆栈工作原理还是有很有帮助的。我们希望这篇文章能够让你更好的了解这个平台，同时，让你更加感谢这些高层的API。</p>
+
+<p>首先，我们将会分析大多数组成<em>Grand Central Dispatch</em>的部分。数年间，苹果公司持续添加功能并且改善它。现在苹果已经将其开源，这意味着它对其他平台也是可用的了。最后，我们将会看一下<a href="#atomic_operations">原子操作</a>——另外的一种底层构建代码的集合。</p>
+
+<p>也许，关于并发编程最好的书是<em>M. Ben-Ari</em>写的《Principles of Concurrent Programming》<a href="https://en.wikipedia.org/wiki/Special:BookSources/0-13-701078-8">ISBN 0-13-701078-8</a>。如果你正在做任何有关并发编程的事情，你需要读一下这本书。这本书已经写了超过30年了，但仍然是无法超越。简洁的写法，优秀的例子和练习，带领你构建并发编程中的基本代码块。这本书现在已经绝版了，但是仍然有一些零散的复印本。有一个新版书，名字叫《Principles of Concurrent and Distributed Programming》<a href="https://en.wikipedia.org/wiki/Special:BookSources/0-321-31283-X">ISBN 0-321-31283-X</a>,好像有很多相同的地方，不过我还没有读过。</p>
+
+<p><a id='once_upon_a_time' name='once_upon_a_time'> </a></p>
+
+<h3>1、从前。。。</h3>
+
+<p>也许GCD中使用最多并且被滥用的就是<em>dispatch_once</em>了。正确的用法看起来是这样的：</p>
+
+<div class="highlight"><pre><code class="objc"><span class="k">+</span> <span class="p">(</span><span class="n">UIColor</span> <span class="o">*</span><span class="p">)</span><span class="nf">boringColor</span><span class="p">;</span>
+<span class="p">{</span>
+    <span class="k">static</span> <span class="n">UIColor</span> <span class="o">*</span><span class="n">color</span><span class="p">;</span>
+    <span class="k">static</span> <span class="kt">dispatch_once_t</span> <span class="n">onceToken</span><span class="p">;</span>
+    <span class="n">dispatch_once</span><span class="p">(</span><span class="o">&amp;</span><span class="n">onceToken</span><span class="p">,</span> <span class="o">^</span><span class="p">{</span>
+        <span class="n">color</span> <span class="o">=</span> <span class="p">[</span><span class="n">UIColor</span> <span class="n">colorWithRed</span><span class="o">:</span><span class="mf">0.380f</span> <span class="n">green</span><span class="o">:</span><span class="mf">0.376f</span> <span class="n">blue</span><span class="o">:</span><span class="mf">0.376f</span> <span class="n">alpha</span><span class="o">:</span><span class="mf">1.000f</span><span class="p">];</span>
+    <span class="p">});</span>
+    <span class="k">return</span> <span class="n">color</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div>
+
+
+<p>这段代码仅仅只会运行一次。并且在连续调用这段代码的期间，检查操作是很高效的。你能使用它来初始化全局的数据比如单例。要注意到的是，使用<em>dispatch_once_t</em>会使得测试变得非常困难（单例和测试只能任取其一）。</p>
+
+<p>要确保<em>onceToken</em>被声明为<strong>static</strong>，或者有全局作用域。任何其他的情况都会导致无法预知的行为。换句话说，不要把<em>dispatch_once_t</em>作为一个对象的成员变量，或者类似的情形。</p>
+
+<p>退回到远古时代（其实也就是几年前），人们会使用<em>pthread_once</em>，因为<em>dispatch_once_t</em>更容易使用并且不易出错，所以你永远都不会使用到<em>pthread_once</em>了。</p>
+
+<p><a id='delaying_after' name='delaying_after'> </a></p>
+
+<h3>2、延后执行</h3>
+
+<p>另一个常见的朋友就是<em>dispatch_after</em>了。它使工作延后执行。它是很强大的，但是要注意：你很容易就陷入到一堆麻烦中。一般的使用是这样的：</p>
+
+<div class="highlight"><pre><code class="objc"><span class="k">-</span> <span class="p">(</span><span class="kt">void</span><span class="p">)</span><span class="nf">foo</span>
+<span class="p">{</span>
+    <span class="kt">double</span> <span class="n">delayInSeconds</span> <span class="o">=</span> <span class="mf">2.0</span><span class="p">;</span>
+    <span class="kt">dispatch_time_t</span> <span class="n">popTime</span> <span class="o">=</span> <span class="n">dispatch_time</span><span class="p">(</span><span class="n">DISPATCH_TIME_NOW</span><span class="p">,</span> <span class="p">(</span><span class="kt">int64_t</span><span class="p">)</span> <span class="p">(</span><span class="n">delayInSeconds</span> <span class="o">*</span> <span class="n">NSEC_PER_SEC</span><span class="p">));</span>
+    <span class="n">dispatch_after</span><span class="p">(</span><span class="n">popTime</span><span class="p">,</span> <span class="n">dispatch_get_main_queue</span><span class="p">(),</span> <span class="o">^</span><span class="p">(</span><span class="kt">void</span><span class="p">){</span>
+        <span class="p">[</span><span class="n">self</span> <span class="n">bar</span><span class="p">];</span>
+    <span class="p">});</span>
+<span class="p">}</span>
+</code></pre></div>
+
+
+<p>咋一看，这段代码是极好的。但是这里也存在一些缺点。我们不能（直接）取消我们已经提交到<em>dispatch_after</em>的代码，它将会运行。</p>
+
+<p>另外一个需要注意的事情就是，在人们使用<em>dispatch_after</em>去完成工作时，容易写出有时间bug的问题倾向的代码。举例来说，一些代码运行的太早并且很可能不知道为什么，这时你把它放到了<em>dispatch_after</em>中，现在，所有代码运行正常了。但是，几周以后，程序停止工作了，并且由于你没有明确指出代码是以什么样的次序运行的，调试代码就变成了一场噩梦。永远不要这样做，大多数的情况下，你最好把代码放到正确的位置。如果代码放到 <em>-viewWillAppear</em> 太早，那么或许 <em>-viewDidAppear</em> 就是正确的地方。</p>
+
+<p>你将会为自己省去很多麻烦，通过在自己代码中建立直接调用（类似<em>-viewDidAppear</em>）而不是依赖于 <em>dispatch_after</em>。</p>
+
+<p>如果你需要一些事情在某个特定的时刻及时的运行，那么 <em>dispatch_after</em> 或许会是个好的选择。确保同时考虑了<em>NSTimer</em>，这个API虽然有点笨重，但是它允许你取消这个定时。</p>
+
+<p><a id='queues' name='queues'> </a></p>
+
+<h3>3、队列</h3>
+
+<p>GCD的一个最基本的部分就是队列。下面我们会给出一些如何使用它的例子。当使用队列的时候，给它们一个好的标签会帮自己不少忙。当调试的时候，这个标签会在Xcode(和lldb)中显示，这会帮助你了解应用程序当前是由谁负责的：</p>
+
+<div class="highlight"><pre><code class="objc"><span class="k">-</span> <span class="p">(</span><span class="kt">id</span><span class="p">)</span><span class="nf">init</span><span class="p">;</span>
+<span class="p">{</span>
+    <span class="n">self</span> <span class="o">=</span> <span class="p">[</span><span class="n">super</span> <span class="n">init</span><span class="p">];</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">self</span> <span class="o">!=</span> <span class="nb">nil</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">NSString</span> <span class="o">*</span><span class="n">label</span> <span class="o">=</span> <span class="p">[</span><span class="n">NSString</span> <span class="n">stringWithFormat</span><span class="o">:</span><span class="s">@&quot;%@.isolation.%p&quot;</span><span class="p">,</span> <span class="p">[</span><span class="n">self</span> <span class="n">class</span><span class="p">],</span> <span class="n">self</span><span class="p">];</span>
+        <span class="n">self</span><span class="p">.</span><span class="n">isolationQueue</span> <span class="o">=</span> <span class="n">dispatch_queue_create</span><span class="p">([</span><span class="n">label</span> <span class="n">UTF8String</span><span class="p">],</span> <span class="mi">0</span><span class="p">);</span>
+        
+        <span class="n">label</span> <span class="o">=</span> <span class="p">[</span><span class="n">NSString</span> <span class="n">stringWithFormat</span><span class="o">:</span><span class="s">@&quot;%@.work.%p&quot;</span><span class="p">,</span> <span class="p">[</span><span class="n">self</span> <span class="n">class</span><span class="p">],</span> <span class="n">self</span><span class="p">];</span>
+        <span class="n">self</span><span class="p">.</span><span class="n">workQueue</span> <span class="o">=</span> <span class="n">dispatch_queue_create</span><span class="p">([</span><span class="n">label</span> <span class="n">UTF8String</span><span class="p">],</span> <span class="mi">0</span><span class="p">);</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="n">self</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div>
+
+
+<p>队列可以是并行也可以是串行的。默认情况下，他们是串行的，也就是说，任何给定的时间内，只能有一个单独的代码块运行。这就是孤立队列的运行方式。队列也可以是并行的，也就是同一时间内允许多代码块同时执行。</p>
+
+<p>GCD队列的内部使用的是线程。GCD管理这些线程，并且使用GCD的时候，你不需要自己创建线程。重要的外在部分是GCD提供给你的用户API，一个不同的抽象层级的接口。当使用GCD来完成并发的工作时，你不必考虑线程方面的问题，代替的，只需考虑队列和工作项目（提交给队列的代码）。当然在这些之下的，依然是线程在工作。GCD的抽象层次为你通常的代码编写提供了更好的方式。</p>
+
+<p>队列和工作项目的方式同时解决了一个普遍的会辐射出去的并发问题：如果我们直接使用线程，并且想要做一些并发的事情，我们可能将我们的工作分成100个小的工作项目，同时基于可以利用的CPU内核数量来创建线程，姑且是8线程。我们把这些工作项目送到这8个线程中。但是写这个函数的人同时也想要使用并发，因此当你调用这个函数的时候，也会创建8个线程。现在，你有了 8×8=64 个线程，尽管你只有8个CPU核心，也就是说任何时候只有12%的线程能够运行这时另外88%的线程什么事情都没做。使用GCD，你不会有这种问题，当操作系统关闭CPU核心以省电时，GCD甚至能够对应的调整线程数量。</p>
+
+<p>GCD通过创建所谓的线程池来大致匹配CPU核心数量。要记住，线程的创建并不是无代价的。每个线程都需要占用内存和内核资源。这里也有一个问题：如果你提交了一个代码块给GCD，但是这个代码块阻塞了这个线程，那么这个线程在这段时间内就不是可用的，并且不能及时处理其他工作——它被阻塞了。为了确保工作项目在队列上一直是执行的，GCD不得不创建一个新的线程，并将新线程添加到线程池。</p>
+
+<p>如果你的代码正在阻塞许多线程，这回带来很大的问题。最开始，线程消耗资源，更多的时，创建他们会变得代价高昂。这需要时间，而且在这段时间内，GCD无法以全速来运行工作项目。有许多能够导致线程阻塞的事情，但是最常见的时与I/O操作有关，也就是从文件或者网络中读写数据。正是因为这些原因，你不应该在GCD队列中以阻塞的方式来运行I/O操作。看一下下面的<a href="#input_output">输入输出</a>段落以了解如何以GCD良好运行的方式来进行I/O操作。</p>
+
+<p><a id='target_queue' name='target_queue'> </a></p>
+
+<h4>3.1、标记队列</h4>
+
+<p>你能够为你创建的任何一个队列设置标记。这会是很强大的，并且有助于调试。</p>
+
+<p>为每一个类创建自己的队列而不是使用全局的队列被认为是一种好的方式。这种放肆下，你可以设置队列的名字，这让调试变得轻松许多——Xcode可以让你在Debug Navigator中看到所有的队列名字，或者你可以直接使用lldb。<em>(lldb) thread list</em>命令将会在控制台打印出所有队列的名字。一旦你使用大量的异步内容，这是很有价值的帮助。</p>
+
+<p>使用私有队列同样强调封装性。这时你自己的队列，你要自己决定如何使用它。</p>
+
+<p>默认情况下，一个新创建的队列转发到默认优先级的全局队列中。我们就将会多讨论一点有关优先级的东西。</p>
+
+<p>你可以改变你队列转发到的队列——也就是说你可以设置自己队列的目标队列。以这种方式，你可以将不同队列链接在一起。你的类<em>Foo</em>的队列转发到类<em>Bar</em>的队列，而类<em>Bar</em>的队列又转发到全局队列。</p>
+
+<p>当你使用孤立队列（之后我们也会讨论）的时候，这会很有用。<em>Foo</em>有一个孤立队列，并且转发到<em>Bar</em>的孤立队列，考虑到<em>Bar</em>的孤立队列所保护的资源，它会自动变为线程安全的。</p>
+
+<p>如果你希望多段代码同时运行，那要确保你自己的队列是并发的。同时需要注意，如果一个队列的目标队列使串行的（也就是非并发），那么实际上这个队列也会转换为一个串行队列。</p>
+
+<p><a id='priorities' name='priorities'> </a></p>
+
+<h4>3.2、优先级</h4>
+
+<p>你通过设置目标为全局队列中的一个来改变自己队列的优先级，但是你应该克制这么做的冲动。</p>
+
+<p>在大多数情况下，改变优先级不会使事情照你预想的方向运行。一些看起简单的事情实际上是一个非常复杂的问题。你很容易会碰到一个叫做<a href="http://en.wikipedia.org/wiki/Priority_inversion">优先级反转</a>的情况。我们的文章<a href="http://www.objc.io/issue-2/concurrency-apis-and-pitfalls.html#priority_inversion">《Concurrent Programming: APIs and Challenges》</a>（已经由破船翻译了，详见<a href="http://beyondvincent.com/2013/07/16/concurrent-programming-apis-and-challenges/">点击此处</a>）有更多关于这个问题的信息，这个问题几乎导致了NASA的探路者火星漫游器变成砖头。</p>
+
+<p>在此基础上，使用<em>DISPATCH_QUEUE_PRIORITY_BACKGROUND</em>队列时，你需要格外小心。除非你理解了<em>throttled I/O and background status as per setpriority(2) </em>（抱歉，我也没理解，不知如何翻译了。）的意思，否则不要使用它。
+不然，系统可能会以难以忍受的方式终止你的应用程序的运行。这可能集中在处理I/O操作上，这种操作以一种不与系统其他处理I/O操作的部分交互的方式运行。但是和优先级反转结合起来，这回变成一种危险的情况。</p>
+
+<p><a id='isolation' name='isolation'> </a></p>
+
+<h3>4、孤立队列</h3>
+
+<p>孤立队列是GCD队列使用中非常普遍的一种模式。这里有两个变种。</p>
+
+<p><a id='protecting_a_resource' name='protecting_a_resource'> </a></p>
+
+<h4>4.1、资源保护</h4>
+
+<p>多线程编程中，最常见的情形是你有一个资源，每次只有一个线程被允许访问这个资源。</p>
+
+<p>我们在<a href="http://www.objc.io/issue-2/concurrency-apis-and-pitfalls.html#shared_resources">《有关并发编程的文章》</a>（参考破船的译文）中讨论了资源在并发编程中意味着什么，其实并发编程中的资源通常就是一块内存或者一个对象，每次只有一个线程可以访问它。</p>
+
+<p>举例来说，我们需要以多线程（或者多个队列）方式访问<em>NSMutableDictionary</em>。我们可能会照下面的代码来做：</p>
+
+<div class="highlight"><pre><code class="objc"><span class="k">-</span> <span class="p">(</span><span class="kt">void</span><span class="p">)</span><span class="nf">setCount:</span><span class="p">(</span><span class="n">NSUInteger</span><span class="p">)</span><span class="nv">count</span> <span class="nf">forKey:</span><span class="p">(</span><span class="n">NSString</span> <span class="o">*</span><span class="p">)</span><span class="nv">key</span>
+<span class="p">{</span>
+    <span class="n">key</span> <span class="o">=</span> <span class="p">[</span><span class="n">key</span> <span class="n">copy</span><span class="p">];</span>
+    <span class="n">dispatch_async</span><span class="p">(</span><span class="n">self</span><span class="p">.</span><span class="n">isolationQueue</span><span class="p">,</span> <span class="o">^</span><span class="p">(){</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">count</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+            <span class="p">[</span><span class="n">self</span><span class="p">.</span><span class="n">counts</span> <span class="n">removeObjectForKey</span><span class="o">:</span><span class="n">key</span><span class="p">];</span>
+        <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+            <span class="n">self</span><span class="p">.</span><span class="n">counts</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="err">@</span><span class="p">(</span><span class="n">count</span><span class="p">);</span>
+        <span class="p">}</span>
+    <span class="p">});</span>
+<span class="p">}</span>
+
+<span class="k">-</span> <span class="p">(</span><span class="n">NSUInteger</span><span class="p">)</span><span class="nf">countForKey:</span><span class="p">(</span><span class="n">NSString</span> <span class="o">*</span><span class="p">)</span><span class="nv">key</span><span class="p">;</span>
+<span class="p">{</span>
+    <span class="n">__block</span> <span class="n">NSUInteger</span> <span class="n">count</span><span class="p">;</span>
+    <span class="n">dispatch_sync</span><span class="p">(</span><span class="n">self</span><span class="p">.</span><span class="n">isolationQueue</span><span class="p">,</span> <span class="o">^</span><span class="p">(){</span>
+        <span class="n">NSNumber</span> <span class="o">*</span><span class="n">n</span> <span class="o">=</span> <span class="n">self</span><span class="p">.</span><span class="n">counts</span><span class="p">[</span><span class="n">key</span><span class="p">];</span>
+        <span class="n">count</span> <span class="o">=</span> <span class="p">[</span><span class="n">n</span> <span class="n">unsignedIntegerValue</span><span class="p">];</span>
+    <span class="p">});</span>
+    <span class="k">return</span> <span class="n">count</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div>
+
+
+<p>通过以上代码，仅仅只有一个线程可以访问<em>NSMutableDictionary</em>的实例。</p>
+
+<p>注意以下四点：</p>
+
+<ol>
+<li>不要使用上面的代码，请先阅读<a href="#multiple_readers_single_writer">多读单写</a>和<a href="#contention">锁竞争</a></li>
+<li>我们使用<em>async</em>当存储一个值的时候，这很重要。我们不想，也不必阻塞当前线程去等待写操作完成。当读操作时，我们使用<em>sync</em>因为我们需要返回值。</li>
+<li>根据函数的定义，<em>-setCount:forKey:</em>需要一个<em>NSString</em>值，我们是使用<em>dispatch_async</em>来传递该值。在代码执行之前，函数的调用者可以自由传递一个<em>NSMutableString</em>值并且在函数返回后可以修改它。因此我们必须对传入的字符串使用<em>copy</em>操作以确保函数能够正确地工作。如果传入的字符串不是可变的（也就是正常的<em>NSString</em>类型），调用<em>copy</em>基本上是个空操作。</li>
+<li><em>isolationQueue</em>创建时，参数<em>dispatch_queue_attr_t</em>的值需要是<em>DISPATCH_QUEUE_SERIAL</em>（或者0）。</li>
+</ol>
+
+
+<p><a id='multiple_readers_single_writer' name='multiple_readers_single_writer'> </a></p>
+
+<h4>4.2、单一资源的多读单写</h4>
+
+<p>我们能够改善上面的那个例子。GCD有可以让多线程运行的并发队列。我们能够安全地使用多线程来从<em>NSMutableDictionary</em>中读取只要我们不同时修改它。当我们需要改变这个字典时，我们使用<em>barrier</em>来分发这个块代码。这样的块代码会在所有之前预定好的块代码完成之后执行，并且所有在它之后的块都会在它完成后才会执行。</p>
+
+<p>我们以以下方式创建队列：</p>
+
+<div class="highlight"><pre><code class="objc"><span class="n">self</span><span class="p">.</span><span class="n">isolationQueue</span> <span class="o">=</span> <span class="n">dispatch_queue_create</span><span class="p">([</span><span class="n">label</span> <span class="n">UTF8String</span><span class="p">],</span> <span class="n">DISPATCH_QUEUE_CONCURRENT</span><span class="p">);</span>
+</code></pre></div>
+
+
+<p>并且用以下代码来改变setter函数：</p>
+
+<div class="highlight"><pre><code class="objc"><span class="k">-</span> <span class="p">(</span><span class="kt">void</span><span class="p">)</span><span class="nf">setCount:</span><span class="p">(</span><span class="n">NSUInteger</span><span class="p">)</span><span class="nv">count</span> <span class="nf">forKey:</span><span class="p">(</span><span class="n">NSString</span> <span class="o">*</span><span class="p">)</span><span class="nv">key</span>
+<span class="p">{</span>
+    <span class="n">key</span> <span class="o">=</span> <span class="p">[</span><span class="n">key</span> <span class="n">copy</span><span class="p">];</span>
+    <span class="n">dispatch_barrier_async</span><span class="p">(</span><span class="n">self</span><span class="p">.</span><span class="n">isolationQueue</span><span class="p">,</span> <span class="o">^</span><span class="p">(){</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">count</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+            <span class="p">[</span><span class="n">self</span><span class="p">.</span><span class="n">counts</span> <span class="n">removeObjectForKey</span><span class="o">:</span><span class="n">key</span><span class="p">];</span>
+        <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+            <span class="n">self</span><span class="p">.</span><span class="n">counts</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="err">@</span><span class="p">(</span><span class="n">count</span><span class="p">);</span>
+        <span class="p">}</span>
+    <span class="p">});</span>
+<span class="p">}</span>
+</code></pre></div>
+
+
+<p>当你使用并发队列时，要确保所有的<em>barrier</em>调用都是<em>async</em>（异步）的。如果你使用<em>dispatch_barrier_sync</em>，那么你很可能会使你自己（更确切的说是，你的代码）产生死锁。写操作需要<em>barrier</em>，并且可以是<em>async</em>的。</p>
+
+<p><a id='contention' name='contention'> </a></p>
+
+<h4>4.3、锁竞争</h4>
+
+<p>首先，这里有一句警告：上面这个例子中我们保护的资源是一个<em>NSMutableDictionary</em>，这段代码作为一个例子运行的不错。但是在真实的代码环境下，把孤立队列放到一个正确的复杂度层级下是很重要的。</p>
+
+<p>如果你对<em>NSMutableDictionary</em>的访问操作变得非常频繁，你会碰到一个已知的叫做锁竞争的问题。锁竞争并不是只是在GCD和队列下才变得特殊，任何使用了锁机制的程序都会碰到同样的问题——只不过不同的锁机制会以不同的方式碰到。</p>
+
+<p>所有对<em>dispatch_async</em>，<em>dispatch_sync</em>等等的调用都需要完成某种形式的锁——以确保仅有一个线程或者特定的线程运行所给的块代码。GCD在一些范围可以避免使用锁而以时序安排来代替，但在最后，问题只是指有所变化。根本问题仍然存在：如果你有大量的线程在同一时间去竞争同一个锁，你就会看到性能的变化，性能会严重下降。</p>
+
+<p>你应该从直接复杂层次中隔离开。当你发现了性能下降，这是表明代码中，存在明显的设计问题。这里有两个地方的开销需要你来平衡。第一个是独占临界区资源太久的开销，以至于别的线程都从进入临界区的操作中阻塞。第二个是太频繁进出临界区的开销。在GCD的世界里，第一种开销的情况就是一个块代码在孤立队列中运行，它可能潜在的阻塞了其他将要在这个孤立队列中运行的代码。第二种开销对应的就是调用<em>dispatch_async</em>和<em>dispatch_sync</em>的开销。无论再怎么优化，这两个动作都不是无代价的。</p>
+
+<p>不幸的是，不存在通用的标准来说明什么是正确的平衡，你需要自己评测和调整。</p>
+
+<p>如果你看上面例子中的代码，我们的临界区代码仅仅做了很简单的事情。这可能也可能不是好的，依赖于它怎么被使用。</p>
+
+<p>在你自己的代码中，要考虑自己是否在更高的层次保护了孤立队列。举个例子，类<em>Foo</em>有一个孤立队列并且它本身保护着自己访问<em>NSMutableDictionary</em>，有可能有一个用到了<em>Foo</em>的类<em>Bar</em>有一个孤立队列保护所有对类<em>Foo</em>的使用。换句话说，你需要把类<em>Foo</em>改变为不再是线程安全的（没有孤立队列），并在<em>Bar</em>中，使用一个孤立队列来确保同一时间只能有一个线程使用<em>Foo</em>。</p>
+
+<p><a id='fully_async' name='fully_async'> </a></p>
+
+<h4>4.4、全都使用异步分发</h4>
+
+<p>我们在这稍稍转变以下话题。正如你在上面看到的，你可以分发一个块，一个工作单元的方式，即可以是同步的，也可以是异步的。我们在<a href="http://www.objc.io/issue-2/concurrency-apis-and-pitfalls.html#dead_locks">关于并发API和陷阱的文章</a>（可以参考破船的译文，见本文开头）中讨论最多的就是死锁。在GCD中，以同步分发的方式非常容易出现这种情况。见下面的代码：</p>
+
+<div class="highlight"><pre><code class="objc"><span class="kt">dispatch_queue_t</span> <span class="n">queueA</span><span class="p">;</span> <span class="c1">// assume we have this</span>
+<span class="n">dispatch_sync</span><span class="p">(</span><span class="n">queueA</span><span class="p">,</span> <span class="o">^</span><span class="p">(){</span>
+    <span class="n">dispatch_sync</span><span class="p">(</span><span class="n">queueA</span><span class="p">,</span> <span class="o">^</span><span class="p">(){</span>
+        <span class="n">foo</span><span class="p">();</span>
+    <span class="p">});</span>
+<span class="p">});</span>
+</code></pre></div>
+
+
+<p>一旦我们进入到第二个<em>dispatch_sync</em>，就会发生死锁。我们不能分发到queueA，因为有人（当前线程）正在队列中并且永远不会离开。但是有更隐晦的死锁方式：</p>
+
+<div class="highlight"><pre><code class="objc"><span class="kt">dispatch_queue_t</span> <span class="n">queueA</span><span class="p">;</span> <span class="c1">// assume we have this</span>
+<span class="kt">dispatch_queue_t</span> <span class="n">queueB</span><span class="p">;</span> <span class="c1">// assume we have this</span>
+
+<span class="n">dispatch_sync</span><span class="p">(</span><span class="n">queueA</span><span class="p">,</span> <span class="o">^</span><span class="p">(){</span>
+    <span class="n">foo</span><span class="p">();</span>
+<span class="p">});</span>
+
+<span class="kt">void</span> <span class="nf">foo</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="n">dispatch_sync</span><span class="p">(</span><span class="n">queueB</span><span class="p">,</span> <span class="o">^</span><span class="p">(){</span>
+        <span class="n">bar</span><span class="p">();</span>
+    <span class="p">});</span>
+<span class="p">}</span>
+
+<span class="kt">void</span> <span class="nf">bar</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="n">dispatch_sync</span><span class="p">(</span><span class="n">queueA</span><span class="p">,</span> <span class="o">^</span><span class="p">(){</span>
+        <span class="n">baz</span><span class="p">();</span>
+    <span class="p">});</span>
+<span class="p">}</span>
+</code></pre></div>
+
+
+<p>单独的每次调用<em>dispatch_sync()</em>看起来都没有问题，但是一旦组合起来，就会发生死锁。</p>
+
+<p>这是使用同步分发存在的固有问题，如果我们使用异步分发，比如：</p>
+
+<div class="highlight"><pre><code class="objc"><span class="kt">dispatch_queue_t</span> <span class="n">queueA</span><span class="p">;</span> <span class="c1">// assume we have this</span>
+<span class="n">dispatch_async</span><span class="p">(</span><span class="n">queueA</span><span class="p">,</span> <span class="o">^</span><span class="p">(){</span>
+    <span class="n">dispatch_async</span><span class="p">(</span><span class="n">queueA</span><span class="p">,</span> <span class="o">^</span><span class="p">(){</span>
+        <span class="n">foo</span><span class="p">();</span>
+    <span class="p">});</span>
+<span class="p">});</span>
+</code></pre></div>
+
+
+<p>一切运行正常。异步调用不会产生死锁。因此值得我们在任何可能的时候都使用异步分发。我们使用一个异步调用结果块的函数，来代替编写一个返回值（这必须要用同步）的方法或者函数。这种方式，我们会有更少发生死锁的可能性。</p>
+
+<p>异步调用的副作用就是它们很难调试。当我们停止了调试器中的代码，再回溯并查看已经变得没有意义了。</p>
+
+<p>要记住这些。死锁通常是最难处理的问题。</p>
+
+<p><a id='write_good_async_api' name='write_good_async_api'> </a></p>
+
+<h4>4.5、如何写出好的异步API</h4>
+
+<p>如果你正在给设计一个给别人（或者是给自己）使用的API，你需要记住几个好的实践。</p>
+
+<p>正如我们刚刚提到的，你需要倾向于异步API。当你创建一个API，它会在你的控制之外以各种方式调用，如果你的代码能产生死锁，那么死锁就会发生。</p>
+
+<p>如果你需要写的函数或者方法，那么让它们调用<em>dispatch_async()</em>。不要让你的函数调用者来这么做，调用者应该可以通过调用你提供的方法或者函数来做到这个。</p>
+
+<p>如果你的方法或函数有一个返回值，通过一个回调的处理来异步传递返回值。这个API应该是这样的，你的方法或函数持有一个结果块代码和一个将结果传递到的目标队列。你函数的调用着不需要自己来将结果分发。这么做的原因很简单：几乎所有时间，调用者都需要在一个适当的队列中，这种方式的代码是很容易被阅读的。并且你的函数无论如何将会（必须）调用<em>dispatch_async()</em>来进行回调处理。</p>
+
+<p>如果你写一个类，让你类的使用这设置一个将回调传递到的队列会是一个好的选择。你的代码可能像这样：</p>
+
+<div class="highlight"><pre><code class="objc"><span class="k">-</span> <span class="p">(</span><span class="kt">void</span><span class="p">)</span><span class="nf">processImage:</span><span class="p">(</span><span class="n">UIImage</span> <span class="o">*</span><span class="p">)</span><span class="nv">image</span> <span class="nf">completionHandler:</span><span class="p">(</span><span class="kt">void</span><span class="p">(</span><span class="o">^</span><span class="p">)(</span><span class="kt">BOOL</span> <span class="n">success</span><span class="p">))</span><span class="nv">handler</span><span class="p">;</span>
+<span class="p">{</span>
+    <span class="n">dispatch_async</span><span class="p">(</span><span class="n">self</span><span class="p">.</span><span class="n">isolationQueue</span><span class="p">,</span> <span class="o">^</span><span class="p">(</span><span class="kt">void</span><span class="p">){</span>
+        <span class="c1">// do actual processing here</span>
+        <span class="n">dispatch_async</span><span class="p">(</span><span class="n">self</span><span class="p">.</span><span class="n">resultQueue</span><span class="p">,</span> <span class="o">^</span><span class="p">(</span><span class="kt">void</span><span class="p">){</span>
+            <span class="n">handler</span><span class="p">(</span><span class="nb">YES</span><span class="p">);</span>
+        <span class="p">});</span>
+    <span class="p">});</span>
+<span class="p">}</span>
+</code></pre></div>
+
+
+<p>如果你以这种方式来写你的类，让类一起工作就会变得相当容易。如果类A使用了类B，它会把自己的孤立队列设置为B的回调队列。</p>
+
+<p><a id='iterative_execution' name='iterative_execution'> </a></p>
+
+<h3>5、迭代执行</h3>
+
+<p>如果你正在摆弄一些数字，并且手头上的问题可以拆分为小的同样的部分，那么<em>dispatch_apply</em>会很有用。</p>
+
+<p>如果你的代码看起来是这样的：</p>
+
+<div class="highlight"><pre><code class="objc"><span class="k">for</span> <span class="p">(</span><span class="kt">size_t</span> <span class="n">y</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">y</span> <span class="o">&lt;</span> <span class="n">height</span><span class="p">;</span> <span class="o">++</span><span class="n">y</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">for</span> <span class="p">(</span><span class="kt">size_t</span> <span class="n">x</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">x</span> <span class="o">&lt;</span> <span class="n">width</span><span class="p">;</span> <span class="o">++</span><span class="n">x</span><span class="p">)</span> <span class="p">{</span>
+        <span class="c1">// Do something with x and y here</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+
+<p>小小的改动，你或许可以就可以让他运行的更快：</p>
+
+<div class="highlight"><pre><code class="objc"><span class="n">dispatch_apply</span><span class="p">(</span><span class="n">height</span><span class="p">,</span> <span class="n">dispatch_get_global_queue</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="o">^</span><span class="p">(</span><span class="kt">size_t</span> <span class="n">y</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">for</span> <span class="p">(</span><span class="kt">size_t</span> <span class="n">x</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">x</span> <span class="o">&lt;</span> <span class="n">width</span><span class="p">;</span> <span class="n">x</span> <span class="o">+=</span> <span class="mi">2</span><span class="p">)</span> <span class="p">{</span>
+        <span class="c1">// Do something with x and y here</span>
+    <span class="p">}</span>
+<span class="p">});</span>
+</code></pre></div>
+
+
+<p>代码运行更好的程度取决于你在循环内部做的操作。</p>
+
+<p>block中运行的工作一定要是非常重要的，否则最外层的那个dispatch_apply的定义就显得太繁琐了。</p>
+
+<p>除非代码受到计算带宽的约束，每个工作单元读写所需要的合适的缓存大小所占用内存是无关紧要的，这对性能会带来显著的影响。受到临界区约束的代码可能不会运行良好。详细讨论这些问题已经超出了这篇文章的范围。使用<em>dispatch_apply</em>可能会对性能提升有所帮助，但是性能优化本身是个很复杂的主题。维基百科上有一篇关于<a href="https://en.wikipedia.org/wiki/Memory_bound">Memory-bound function</a>的文章。内存访问速度在L2，L3和主存上变化很大。当你的数据访问模式与缓存大小不匹配时，10倍的性能下降的情况并不少见。</p>
+
+<p><a id='groups' name='groups'> </a></p>
+
+<h3>6、组</h3>
+
+<p>很多时候，你发现需要将几个异步代码块组合起来去完成一个给定的任务。这些任务中甚至有些是可以并行的。现在，如果你想要在这些代码块都执行完成后运行一些代码，“组”可以完成这项任务。看这里的例子：</p>
+
+<div class="highlight"><pre><code class="objc"><span class="kt">dispatch_group_t</span> <span class="n">group</span> <span class="o">=</span> <span class="n">dispatch_group_create</span><span class="p">();</span>
+
+<span class="kt">dispatch_queue_t</span> <span class="n">queue</span> <span class="o">=</span> <span class="n">dispatch_get_global_queue</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+<span class="n">dispatch_group_async</span><span class="p">(</span><span class="n">group</span><span class="p">,</span> <span class="n">queue</span><span class="p">,</span> <span class="o">^</span><span class="p">(){</span>
+    <span class="c1">// Do something that takes a while</span>
+    <span class="p">[</span><span class="n">self</span> <span class="n">doSomeFoo</span><span class="p">];</span>
+    <span class="n">dispatch_group_async</span><span class="p">(</span><span class="n">group</span><span class="p">,</span> <span class="n">dispatch_get_main_queue</span><span class="p">(),</span> <span class="o">^</span><span class="p">(){</span>
+        <span class="n">self</span><span class="p">.</span><span class="n">foo</span> <span class="o">=</span> <span class="mi">42</span><span class="p">;</span>
+    <span class="p">});</span>
+<span class="p">});</span>
+<span class="n">dispatch_group_async</span><span class="p">(</span><span class="n">group</span><span class="p">,</span> <span class="o">^</span><span class="p">(){</span>
+    <span class="c1">// Do something else that takes a while</span>
+    <span class="p">[</span><span class="n">self</span> <span class="n">doSomeBar</span><span class="p">];</span>
+    <span class="n">dispatch_group_async</span><span class="p">(</span><span class="n">group</span><span class="p">,</span> <span class="n">dispatch_get_main_queue</span><span class="p">(),</span> <span class="o">^</span><span class="p">(){</span>
+        <span class="n">self</span><span class="p">.</span><span class="n">bar</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>
+    <span class="p">});</span>
+<span class="p">});</span>
+
+<span class="c1">// This block will run once everything above is done:</span>
+<span class="n">dispatch_group_notify</span><span class="p">(</span><span class="n">group</span><span class="p">,</span> <span class="n">dispatch_get_main_queue</span><span class="p">(),</span> <span class="o">^</span><span class="p">(){</span>
+    <span class="n">NSLog</span><span class="p">(</span><span class="s">@&quot;foo: %d&quot;</span><span class="p">,</span> <span class="n">self</span><span class="p">.</span><span class="n">foo</span><span class="p">);</span>
+    <span class="n">NSLog</span><span class="p">(</span><span class="s">@&quot;bar: %d&quot;</span><span class="p">,</span> <span class="n">self</span><span class="p">.</span><span class="n">bar</span><span class="p">);</span>
+<span class="p">});</span>
+</code></pre></div>
+
+
+<p>需要注意到的重要的事情是，所有的这些都是非阻塞的。我们从未让当前的线程一直等待直到别的任务做完。恰恰相反，我们只是简单的将多个代码块放入队列。由于代码不会阻塞，所以就不会产生死锁。</p>
+
+<p>同时需要注意的是，在这个小的简单的例子中，我们是怎么在不同的队列间进切换的。</p>
+
+<p><a id='with_existing_api' name='with_existing_api'> </a></p>
+
+<h4>6.1、对现有API使用<em>dispatch_group_t</em></h4>
+
+<p>一旦你将组作为你的工具箱中的一部分，你可能会想知道为什么大多数的异步API不把<em>dispatch_group_t</em>作为其的一个可选参数。这没有什么令人绝望的理由，仅仅是因为自己添加这个功能太简单了，但是你还是要小心以确保自己的代码是成对出现的。</p>
+
+<p>举例来说，我们可以给<strong>Core Data</strong>的<em>-performBlock:</em>函数添加上组的功能，那么API会变得像这个样子：</p>
+
+<div class="highlight"><pre><code class="objc"><span class="k">-</span> <span class="p">(</span><span class="kt">void</span><span class="p">)</span><span class="nf">withGroup:</span><span class="p">(</span><span class="kt">dispatch_group_t</span><span class="p">)</span><span class="nv">group</span> <span class="nf">performBlock:</span><span class="p">(</span><span class="kt">dispatch_block_t</span><span class="p">)</span><span class="nv">block</span>
+<span class="p">{</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">group</span> <span class="o">==</span> <span class="nb">NULL</span><span class="p">)</span> <span class="p">{</span>
+        <span class="p">[</span><span class="n">self</span> <span class="n">performBlock</span><span class="o">:</span><span class="n">block</span><span class="p">];</span>
+    <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+        <span class="n">dispatch_group_enter</span><span class="p">(</span><span class="n">group</span><span class="p">);</span>
+        <span class="p">[</span><span class="n">self</span> <span class="n">performBlock</span><span class="o">:^</span><span class="p">(){</span>
+            <span class="n">block</span><span class="p">();</span>
+            <span class="n">dispatch_group_leave</span><span class="p">(</span><span class="n">group</span><span class="p">);</span>
+        <span class="p">}];</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+
+<p>这样做允许我们使用dispatch_group_notify来运行一段代码，当Core Data上的一堆操作完成以后。</p>
+
+<p>很明显，我们可以给<strong>NSURLConnection</strong>做同样的事情：</p>
+
+<div class="highlight"><pre><code class="objc"><span class="k">+</span> <span class="p">(</span><span class="kt">void</span><span class="p">)</span><span class="nf">withGroup:</span><span class="p">(</span><span class="kt">dispatch_group_t</span><span class="p">)</span><span class="nv">group</span> 
+        <span class="nf">sendAsynchronousRequest:</span><span class="p">(</span><span class="n">NSURLRequest</span> <span class="o">*</span><span class="p">)</span><span class="nv">request</span> 
+        <span class="nf">queue:</span><span class="p">(</span><span class="n">NSOperationQueue</span> <span class="o">*</span><span class="p">)</span><span class="nv">queue</span> 
+        <span class="nf">completionHandler:</span><span class="p">(</span><span class="kt">void</span> <span class="p">(</span><span class="o">^</span><span class="p">)(</span><span class="n">NSURLResponse</span><span class="o">*</span><span class="p">,</span> <span class="n">NSData</span><span class="o">*</span><span class="p">,</span> <span class="n">NSError</span><span class="o">*</span><span class="p">))</span><span class="nv">handler</span>
+<span class="p">{</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">group</span> <span class="o">==</span> <span class="nb">NULL</span><span class="p">)</span> <span class="p">{</span>
+        <span class="p">[</span><span class="n">self</span> <span class="n">sendAsynchronousRequest</span><span class="o">:</span><span class="n">request</span> 
+                                <span class="n">queue</span><span class="o">:</span><span class="n">queue</span> 
+                    <span class="n">completionHandler</span><span class="o">:</span><span class="n">handler</span><span class="p">];</span>
+    <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+        <span class="n">dispatch_group_enter</span><span class="p">(</span><span class="n">group</span><span class="p">);</span>
+        <span class="p">[</span><span class="n">self</span> <span class="n">sendAsynchronousRequest</span><span class="o">:</span><span class="n">request</span> 
+                                <span class="n">queue</span><span class="o">:</span><span class="n">queue</span> 
+                    <span class="n">completionHandler</span><span class="o">:^</span><span class="p">(</span><span class="n">NSURLResponse</span> <span class="o">*</span><span class="n">response</span><span class="p">,</span> <span class="n">NSData</span> <span class="o">*</span><span class="n">data</span><span class="p">,</span> <span class="n">NSError</span> <span class="o">*</span><span class="n">error</span><span class="p">){</span>
+            <span class="n">handler</span><span class="p">(</span><span class="n">response</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">error</span><span class="p">);</span>
+            <span class="n">dispatch_group_leave</span><span class="p">(</span><span class="n">group</span><span class="p">);</span>
+        <span class="p">}];</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+
+<p>为了能正常工作，你需要确保:</p>
+
+<ul>
+<li>dispatch_group_enter()一定要在dispatch_group_leave()之前运行。</li>
+<li>dispatch_group_enter()和dispatch_group_leave()通常是成对出现的（就算有错误产生时）。</li>
+</ul>
+
+
+<p><a id='sources' name='sources'> </a></p>
+
+<h3>7、事件源</h3>
+
+<p>GCD有一个较少人知道的特性：事件源dispatch_source_t。</p>
+
+<p>正如大多数的GCD，它也是很底层的。当你需要用到它时，它会变得极其有用。它的一些使用是秘传招数，我们将会接触到一部分。是事件源大部分对iOS平台来说不是很有用，因为在iOS平台有诸多限制，你无法启动进程（因此就没有必要监视进程），也不能在你的app之外写数据（因此也就没有必要去监视文件）等等。</p>
+
+<p>GCD事件源是以极其资源高效的方式实现的。</p>
+
+<p><a id='watching_processes' name='watching_processes'> </a></p>
+
+<h4>7.1、监视进程</h4>
+
+<p>如果一些进程正在运行而你想知道他们什么时候存在，GCD能够做到这些。你也可以使用GCD来检测进程什么时候分叉，也就是产生了子进程或者一个信号被传送给了进程（比如SIGTERM）。</p>
+
+<div class="highlight"><pre><code class="objc"><span class="n">NSRunningApplication</span> <span class="o">*</span><span class="n">mail</span> <span class="o">=</span> <span class="p">[</span><span class="n">NSRunningApplication</span> 
+  <span class="n">runningApplicationsWithBundleIdentifier</span><span class="o">:</span><span class="s">@&quot;com.apple.mail&quot;</span><span class="p">];</span>
+<span class="k">if</span> <span class="p">(</span><span class="n">mail</span> <span class="o">==</span> <span class="nb">nil</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">return</span><span class="p">;</span>
+<span class="p">}</span>
+<span class="kt">pid_t</span> <span class="k">const</span> <span class="n">pid</span> <span class="o">=</span> <span class="n">mail</span><span class="p">.</span><span class="n">processIdentifier</span><span class="p">;</span>
+<span class="n">self</span><span class="p">.</span><span class="n">source</span> <span class="o">=</span> <span class="n">dispatch_source_create</span><span class="p">(</span><span class="n">DISPATCH_SOURCE_TYPE_PROC</span><span class="p">,</span> <span class="n">pid</span><span class="p">,</span> 
+  <span class="n">DISPATCH_PROC_EXIT</span><span class="p">,</span> <span class="n">DISPATCH_TARGET_QUEUE_DEFAULT</span><span class="p">);</span>
+<span class="n">dispatch_source_set_event_handler</span><span class="p">(</span><span class="n">self</span><span class="p">.</span><span class="n">source</span><span class="p">,</span> <span class="o">^</span><span class="p">(){</span>
+    <span class="n">NSLog</span><span class="p">(</span><span class="s">@&quot;Mail quit.&quot;</span><span class="p">);</span>
+<span class="p">});</span>
+<span class="n">dispatch_resume</span><span class="p">(</span><span class="n">self</span><span class="p">.</span><span class="n">source</span><span class="p">);</span>
+</code></pre></div>
+
+
+<p>当<em>Mail.app</em>退出的时候，这个程序会打印出<em>Mail quit.</em>。</p>
+
+<p><a id='watching_files' name='watching_files'> </a></p>
+
+<h4>7.2、监视文件</h4>
+
+<p>这种可能性是无穷尽的。你能直接监视一个文件的改变，并且当改变发生时，事件源的事件处理将会被调用。</p>
+
+<p>你也可以使用它来监视文件夹，比如创建一个<em>watch folder</em>。</p>
+
+<div class="highlight"><pre><code class="objc"><span class="n">NSURL</span> <span class="o">*</span><span class="n">directoryURL</span><span class="p">;</span> <span class="c1">// assume this is set to a directory</span>
+<span class="kt">int</span> <span class="k">const</span> <span class="n">fd</span> <span class="o">=</span> <span class="n">open</span><span class="p">([[</span><span class="n">directoryURL</span> <span class="n">path</span><span class="p">]</span> <span class="n">fileSystemRepresentation</span><span class="p">],</span> <span class="n">O_EVTONLY</span><span class="p">);</span>
+<span class="k">if</span> <span class="p">(</span><span class="n">fd</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+    <span class="kt">char</span> <span class="n">buffer</span><span class="p">[</span><span class="mi">80</span><span class="p">];</span>
+    <span class="n">strerror_r</span><span class="p">(</span><span class="n">errno</span><span class="p">,</span> <span class="n">buffer</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">buffer</span><span class="p">));</span>
+    <span class="n">NSLog</span><span class="p">(</span><span class="s">@&quot;Unable to open </span><span class="se">\&quot;</span><span class="s">%@</span><span class="se">\&quot;</span><span class="s">: %s (%d)&quot;</span><span class="p">,</span> <span class="p">[</span><span class="n">directoryURL</span> <span class="n">path</span><span class="p">],</span> <span class="n">buffer</span><span class="p">,</span> <span class="n">errno</span><span class="p">);</span>
+    <span class="k">return</span><span class="p">;</span>
+<span class="p">}</span>
+<span class="kt">dispatch_source_t</span> <span class="n">source</span> <span class="o">=</span> <span class="n">dispatch_source_create</span><span class="p">(</span><span class="n">DISPATCH_SOURCE_TYPE_VNODE</span><span class="p">,</span> <span class="n">fd</span><span class="p">,</span> 
+  <span class="n">DISPATCH_VNODE_WRITE</span> <span class="o">|</span> <span class="n">DISPATCH_VNODE_DELETE</span><span class="p">,</span> <span class="n">DISPATCH_TARGET_QUEUE_DEFAULT</span><span class="p">);</span>
+<span class="n">dispatch_source_set_event_handler</span><span class="p">(</span><span class="n">source</span><span class="p">,</span> <span class="o">^</span><span class="p">(){</span>
+    <span class="kt">unsigned</span> <span class="kt">long</span> <span class="k">const</span> <span class="n">data</span> <span class="o">=</span> <span class="n">dispatch_source_get_data</span><span class="p">(</span><span class="n">source</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">data</span> <span class="o">&amp;</span> <span class="n">DISPATCH_VNODE_WRITE</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">NSLog</span><span class="p">(</span><span class="s">@&quot;The directory changed.&quot;</span><span class="p">);</span>
+    <span class="p">}</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">data</span> <span class="o">&amp;</span> <span class="n">DISPATCH_VNODE_DELETE</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">NSLog</span><span class="p">(</span><span class="s">@&quot;The directory has been deleted.&quot;</span><span class="p">);</span>
+    <span class="p">}</span>
+<span class="p">});</span>
+<span class="n">dispatch_source_set_cancel_handler</span><span class="p">(</span><span class="n">source</span><span class="p">,</span> <span class="o">^</span><span class="p">(){</span>
+    <span class="n">close</span><span class="p">(</span><span class="n">fd</span><span class="p">);</span>
+<span class="p">});</span>
+<span class="n">self</span><span class="p">.</span><span class="n">source</span> <span class="o">=</span> <span class="n">source</span><span class="p">;</span>
+<span class="n">dispatch_resume</span><span class="p">(</span><span class="n">self</span><span class="p">.</span><span class="n">source</span><span class="p">);</span>
+</code></pre></div>
+
+
+<p>你应该一直添加DISPATCH_VNODE_DELETE去检测文件或者文件夹是否已经被删除——然后就停止监听。</p>
+
+<p><a id='timers' name='timers'> </a></p>
+
+<h4>7.3、定时器</h4>
+
+<p>大多数情况下，对于定时事件，你会选择<strong>NSTimer</strong>。定时器的GCD版本是底层的，它会给你更多控制权——但要小心使用。</p>
+
+<p>需要特别重点指出的是，为了让OS节省电量，需要为GCD的定时器接口指定一个低的误差值。如果你不必要的指定了一个过低的误差值，你将会浪费更多的电量。</p>
+
+<p>这里我们设定了一个5秒的定时器，并允许有十分之一秒的误差：</p>
+
+<div class="highlight"><pre><code class="objc"><span class="kt">dispatch_source_t</span> <span class="n">source</span> <span class="o">=</span> <span class="n">dispatch_source_create</span><span class="p">(</span><span class="n">DISPATCH_SOURCE_TYPE_TIMER</span><span class="p">,</span> 
+  <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">DISPATCH_TARGET_QUEUE_DEFAULT</span><span class="p">);</span>
+<span class="n">dispatch_source_set_event_handler</span><span class="p">(</span><span class="n">source</span><span class="p">,</span> <span class="o">^</span><span class="p">(){</span>
+    <span class="n">NSLog</span><span class="p">(</span><span class="s">@&quot;Time flies.&quot;</span><span class="p">);</span>
+<span class="p">});</span>
+<span class="kt">dispatch_time_t</span> <span class="n">start</span>
+<span class="nf">dispatch_source_set_timer</span><span class="p">(</span><span class="n">source</span><span class="p">,</span> <span class="n">DISPATCH_TIME_NOW</span><span class="p">,</span> <span class="mi">5ull</span> <span class="o">*</span> <span class="n">NSEC_PER_SEC</span><span class="p">,</span> 
+  <span class="mi">100ull</span> <span class="o">*</span> <span class="n">NSEC_PER_MSEC</span><span class="p">);</span>
+<span class="n">self</span><span class="p">.</span><span class="n">source</span> <span class="o">=</span> <span class="n">source</span><span class="p">;</span>
+<span class="n">dispatch_resume</span><span class="p">(</span><span class="n">self</span><span class="p">.</span><span class="n">source</span><span class="p">);</span>
+</code></pre></div>
+
+
+<p><a id='canceling' name='canceling'> </a></p>
+
+<h4>7.4、取消</h4>
+
+<p>所有的事件源都允许你添加一个<em>cancel handler</em>。这对清理你为事件源创建的任何资源都是很有帮助的，比如关闭文件描述符。GCD保证在<em>cancel handle</em>调用前，所有的事件处理都已经完成调用。</p>
+
+<p>看上面的<a href="#watching_files">监视文件例子</a>中对<em>dispatch_source_set_cancel_handler()</em>的使用。</p>
+
+<p><a id='input_output' name='input_output'> </a></p>
+
+<h3>8、输入输出</h3>
+
+<p>写出能够在繁重的I/O处理情况下运行良好的代码是一件非常棘手的事情。GCD有一些能够帮上忙的地方。不会涉及太多的细节，我们只简单的分析下问题是什么，GCD是怎么处理的。</p>
+
+<p>习惯上，当你从一个网络套接字中读取数据时，你要么做一个阻塞的读取操作，也就是让你个线程一直等待直到数据变得可用，或者是做反复的轮询操作。这两种方法都是很浪费资源并且无法度量。然而，<em>kqueue</em>解决了轮询的问题，通过当数据变得可用时传递一个事件，GCD也采用了同样的方法，但是更加优雅。当向套接字写数据时，同样的问题也存在，这时你要么做阻塞的写操作，要么等待套接字能够接收数据。</p>
+
+<p>在处理I/O时，还有一个问题就是数据是以块的形式到达的。当从网络中读取数据时，依据MTU(最大传输单元)数据块典型的大小是在1.5K左右。这使得数据块内可以是任何内容。一旦数据到达，你通常只是对跨多个数据块的内容感兴趣。而且通常你会在一个大的缓冲区里将数据组合起来然后再进行处理。假设（人为例子）你收到了这样8个数据块：</p>
+
+<div class="highlight"><pre><code class="html">0: HTTP/1.1 200 OK\r\nDate: Mon, 23 May 2005 22:38
+1: :34 GMT\r\nServer: Apache/1.3.3.7 (Unix) (Red-H
+2: at/Linux)\r\nLast-Modified: Wed, 08 Jan 2003 23
+3: :11:55 GMT\r\nEtag: &quot;3f80f-1b6-3e1cb03b&quot;\r\nCon
+4: tent-Type: text/html; charset=UTF-8\r\nContent-
+5: Length: 131\r\nConnection: close\r\n\r\n<span class="nt">&lt;html&gt;</span>\r
+6: \n<span class="nt">&lt;head&gt;</span>\r\n  <span class="nt">&lt;title&gt;</span>An Example Page<span class="nt">&lt;/title&gt;</span>\r\n
+7: <span class="nt">&lt;/head&gt;</span>\r\n<span class="nt">&lt;body&gt;</span>\r\n  Hello World, this is a ve
+</code></pre></div>
+
+
+<p>如果你是在寻找HTTP的头部，将所有数据块组合成一个大的缓冲区并且从中查找<strong>\r\n\r\n</strong>是非常简单的。但是这样做，你会大量地复制这些数据。大量旧的C语言API存在的一个问题就是，缓冲区没有所有权的概念，所以函数不得不将数据再次拷贝到自己的缓冲区中——又一次的拷贝。拷贝数据操作看起来是无关紧要的，但是当你正在做大量的I/O操作的时候，你会在你的<em>profiling tool(Instruments)</em>中看到这些拷贝操作大量出现。即使你仅仅每个内存区域拷贝一次，你还是使用了两倍的存储带宽并且占用了两倍的内存缓存。</p>
+
+<p><a id='gcd_and_buffers' name='gcd_and_buffers'> </a></p>
+
+<h4>8.1、GCD和缓冲区</h4>
+
+<p>最直接了当的方法是使用数据缓冲区。GCD有一个<em>dispatch_data_t</em>类型，在某种程度上和Objective-C的<em>NSData</em>类型很相似。但是它能做别的事情，而且更通用。</p>
+
+<p>注意，<em>dispatch_data_t</em>能够做<em>retain</em>和<em>release</em>操作，并且<em>dispatch_data_t</em>拥有它持有的对象。</p>
+
+<p>这看起来无关紧要，但是我们必须记住GCD只是一个普通的C API，并且不能使用Objective-C。
+通常的做法是创建一个缓冲区，这个缓冲区要么是基于栈的，要么是<em>malloc</em>操作分配的内存区域，这些都没有所有权。</p>
+
+<p><em>dispatch_data_t</em>的一个独特的属性是它可以基于零碎的内存区域。这解决了我们刚提到的组合内存的问题。当你要将两个数据对象连接起来时：</p>
+
+<div class="highlight"><pre><code class="objc"><span class="kt">dispatch_data_t</span> <span class="n">a</span><span class="p">;</span> <span class="c1">// Assume this hold some valid data</span>
+<span class="kt">dispatch_data_t</span> <span class="n">b</span><span class="p">;</span> <span class="c1">// Assume this hold some valid data</span>
+<span class="kt">dispatch_data_t</span> <span class="n">c</span> <span class="o">=</span> <span class="n">dispatch_data_create_concat</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">);</span>
+</code></pre></div>
+
+
+<p>数据对象c并不会将a和b拷贝到一个单独的，更大的内存区域里去。相反，它只是简单地持有a和b。你可以使用<em>dispatch_data_apply</em>来遍历对象c持有的内存区域：</p>
+
+<div class="highlight"><pre><code class="objc"><span class="n">dispatch_data_apply</span><span class="p">(</span><span class="n">c</span><span class="p">,</span> <span class="o">^</span><span class="p">(</span><span class="kt">dispatch_data_t</span> <span class="n">region</span><span class="p">,</span> <span class="kt">size_t</span> <span class="n">offset</span><span class="p">,</span> <span class="k">const</span> <span class="kt">void</span> <span class="o">*</span><span class="n">buffer</span><span class="p">,</span> <span class="kt">size_t</span> <span class="n">size</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">&quot;region with offset %zu, size %zu</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">offset</span><span class="p">,</span> <span class="n">size</span><span class="p">);</span>
+    <span class="k">return</span> <span class="nb">true</span><span class="p">;</span>
+<span class="p">});</span>
+</code></pre></div>
+
+
+<p>类似的，你可以使用<em>dispatch_data_create_subrange</em>来创建一个不做任何拷贝操作的子区域。</p>
+
+<p><a id='reading_and_writing' name='reading_and_writing'> </a></p>
+
+<h4>8.2、读和写</h4>
+
+<p>在GCD的内核中，<em>Dispatch I/O</em>就是所谓的通道。调度I/O通道提供了一种从文件描述符中读写的不同的方式。创建这样一个通道最基本的方式就是调用：</p>
+
+<div class="highlight"><pre><code class="objc"><span class="kt">dispatch_io_t</span> <span class="nf">dispatch_io_create</span><span class="p">(</span><span class="kt">dispatch_io_type_t</span> <span class="n">type</span><span class="p">,</span> <span class="kt">dispatch_fd_t</span> <span class="n">fd</span><span class="p">,</span> 
+  <span class="kt">dispatch_queue_t</span> <span class="n">queue</span><span class="p">,</span> <span class="kt">void</span> <span class="p">(</span><span class="o">^</span><span class="n">cleanup_handler</span><span class="p">)(</span><span class="kt">int</span> <span class="n">error</span><span class="p">));</span>
+</code></pre></div>
+
+
+<p>这将返回一个持有文件描述符的创建好的通道。在你通过它创建了通道之后，你不准以任何方式修改这个文件描述符。</p>
+
+<p>有两种从根本上不同类型的通道：流和随机存取。如果你打来了硬盘上的一个文件，你可以使用它来创建一个随机存取的通道（因为这样的文件描述符是可寻址的）。如果你打开了一个套接字，你可以创建一个流通道。</p>
+
+<p>如果你想要为一个文件创建一个通道，你最好使用需要一个路径参数的<em>dispatch_io_create_with_path</em>，并且让GCD来打开这个文件。这时有利的，因为GCD能够延迟打开这个文件，以限制同一时间同时打开的文件数量。</p>
+
+<p>类似通常的read(2)，write(2)和close(2)的操作，GCD提供了<em>dispatch_io_read</em>，<em>dispatch_io_write</em>和<em>dispatch_io_close</em>。无论何时数据被读完或者写完，读写操作通过调用一个回调块来结束。这些都是以非阻塞，异步I/O的形式高效实现的。</p>
+
+<p>在这你得不到所有的细节，但是这里会提供一个创建TCP服务端的例子：</p>
+
+<p>首先我们创建一个监听套接字，并且设置一个接收连接的事件源：</p>
+
+<div class="highlight"><pre><code class="objc"><span class="n">_isolation</span> <span class="o">=</span> <span class="n">dispatch_queue_create</span><span class="p">([[</span><span class="n">self</span> <span class="n">description</span><span class="p">]</span> <span class="n">UTF8String</span><span class="p">],</span> <span class="mi">0</span><span class="p">);</span>
+<span class="n">_nativeSocket</span> <span class="o">=</span> <span class="n">socket</span><span class="p">(</span><span class="n">PF_INET6</span><span class="p">,</span> <span class="n">SOCK_STREAM</span><span class="p">,</span> <span class="n">IPPROTO_TCP</span><span class="p">);</span>
+<span class="k">struct</span> <span class="n">sockaddr_in</span> <span class="n">sin</span> <span class="o">=</span> <span class="p">{};</span>
+<span class="n">sin</span><span class="p">.</span><span class="n">sin_len</span> <span class="o">=</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">sin</span><span class="p">);</span>
+<span class="n">sin</span><span class="p">.</span><span class="n">sin_family</span> <span class="o">=</span> <span class="n">AF_INET6</span><span class="p">;</span>
+<span class="n">sin</span><span class="p">.</span><span class="n">sin_port</span> <span class="o">=</span> <span class="n">htons</span><span class="p">(</span><span class="n">port</span><span class="p">);</span>
+<span class="n">sin</span><span class="p">.</span><span class="n">sin_addr</span><span class="p">.</span><span class="n">s_addr</span><span class="o">=</span> <span class="n">INADDR_ANY</span><span class="p">;</span>
+<span class="kt">int</span> <span class="n">err</span> <span class="o">=</span> <span class="n">bind</span><span class="p">(</span><span class="n">result</span><span class="p">.</span><span class="n">nativeSocket</span><span class="p">,</span> <span class="p">(</span><span class="k">struct</span> <span class="n">sockaddr</span> <span class="o">*</span><span class="p">)</span> <span class="o">&amp;</span><span class="n">sin</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">sin</span><span class="p">));</span>
+<span class="n">NSCAssert</span><span class="p">(</span><span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">err</span><span class="p">,</span> <span class="s">@&quot;&quot;</span><span class="p">);</span>
+
+<span class="n">_eventSource</span> <span class="o">=</span> <span class="n">dispatch_source_create</span><span class="p">(</span><span class="n">DISPATCH_SOURCE_TYPE_READ</span><span class="p">,</span> <span class="n">_nativeSocket</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">_isolation</span><span class="p">);</span>
+<span class="n">dispatch_source_set_event_handler</span><span class="p">(</span><span class="n">result</span><span class="p">.</span><span class="n">eventSource</span><span class="p">,</span> <span class="o">^</span><span class="p">{</span>
+    <span class="n">acceptConnection</span><span class="p">(</span><span class="n">_nativeSocket</span><span class="p">);</span>
+<span class="p">});</span>
+</code></pre></div>
+
+
+<p>当接受了连接，我们创建一个I/O通道：</p>
+
+<div class="highlight"><pre><code class="objc"><span class="k">typedef</span> <span class="k">union</span> <span class="n">socketAddress</span> <span class="p">{</span>
+    <span class="k">struct</span> <span class="n">sockaddr</span> <span class="n">sa</span><span class="p">;</span>
+    <span class="k">struct</span> <span class="n">sockaddr_in</span> <span class="n">sin</span><span class="p">;</span>
+    <span class="k">struct</span> <span class="n">sockaddr_in6</span> <span class="n">sin6</span><span class="p">;</span>
+<span class="p">}</span> <span class="n">socketAddressUnion</span><span class="p">;</span>
+
+<span class="n">socketAddressUnion</span> <span class="n">rsa</span><span class="p">;</span> <span class="c1">// remote socket address</span>
+<span class="kt">socklen_t</span> <span class="n">len</span> <span class="o">=</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">rsa</span><span class="p">);</span>
+<span class="kt">int</span> <span class="n">native</span> <span class="o">=</span> <span class="n">accept</span><span class="p">(</span><span class="n">nativeSocket</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">rsa</span><span class="p">.</span><span class="n">sa</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">len</span><span class="p">);</span>
+<span class="k">if</span> <span class="p">(</span><span class="n">native</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+    <span class="c1">// Error. Ignore.</span>
+    <span class="k">return</span> <span class="nb">nil</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="n">_remoteAddress</span> <span class="o">=</span> <span class="n">rsa</span><span class="p">;</span>
+<span class="n">_isolation</span> <span class="o">=</span> <span class="n">dispatch_queue_create</span><span class="p">([[</span><span class="n">self</span> <span class="n">description</span><span class="p">]</span> <span class="n">UTF8String</span><span class="p">],</span> <span class="mi">0</span><span class="p">);</span>
+<span class="n">_channel</span> <span class="o">=</span> <span class="n">dispatch_io_create</span><span class="p">(</span><span class="n">DISPATCH_IO_STREAM</span><span class="p">,</span> <span class="n">native</span><span class="p">,</span> <span class="n">_isolation</span><span class="p">,</span> <span class="o">^</span><span class="p">(</span><span class="kt">int</span> <span class="n">error</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">NSLog</span><span class="p">(</span><span class="s">@&quot;An error occured while listening on socket: %d&quot;</span><span class="p">,</span> <span class="n">error</span><span class="p">);</span>
+<span class="p">});</span>
+
+<span class="c1">//dispatch_io_set_high_water(_channel, 8 * 1024);</span>
+<span class="n">dispatch_io_set_low_water</span><span class="p">(</span><span class="n">_channel</span><span class="p">,</span> <span class="mi">1</span><span class="p">);</span>
+<span class="n">dispatch_io_set_interval</span><span class="p">(</span><span class="n">_channel</span><span class="p">,</span> <span class="n">NSEC_PER_MSEC</span> <span class="o">*</span> <span class="mi">10</span><span class="p">,</span> <span class="n">DISPATCH_IO_STRICT_INTERVAL</span><span class="p">);</span>
+
+<span class="n">socketAddressUnion</span> <span class="n">lsa</span><span class="p">;</span> <span class="c1">// remote socket address</span>
+<span class="kt">socklen_t</span> <span class="n">len</span> <span class="o">=</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">rsa</span><span class="p">);</span>
+<span class="n">getsockname</span><span class="p">(</span><span class="n">native</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">lsa</span><span class="p">.</span><span class="n">sa</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">len</span><span class="p">);</span>
+<span class="n">_localAddress</span> <span class="o">=</span> <span class="n">lsa</span><span class="p">;</span>
+</code></pre></div>
+
+
+<p>如果我们想要设置<em>SO_KEEPALIVE</em>（如果我们使用了HTTP的keep-alive等级），我们需要在调用<em>dispatch_io_create</em>前这么做。</p>
+
+<p>创建好I/O通道后，我们可以设置读取处理程序：</p>
+
+<div class="highlight"><pre><code class="objc"><span class="n">dispatch_io_read</span><span class="p">(</span><span class="n">_channel</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">SIZE_MAX</span><span class="p">,</span> <span class="n">_isolation</span><span class="p">,</span> <span class="o">^</span><span class="p">(</span><span class="kt">bool</span> <span class="n">done</span><span class="p">,</span> <span class="kt">dispatch_data_t</span> <span class="n">data</span><span class="p">,</span> <span class="kt">int</span> <span class="n">error</span><span class="p">){</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">data</span> <span class="o">!=</span> <span class="nb">NULL</span><span class="p">)</span> <span class="p">{</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">_data</span> <span class="o">==</span> <span class="nb">NULL</span><span class="p">)</span> <span class="p">{</span>
+            <span class="n">_data</span> <span class="o">=</span> <span class="n">data</span><span class="p">;</span>
+        <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+            <span class="n">_data</span> <span class="o">=</span> <span class="n">dispatch_data_create_concat</span><span class="p">(</span><span class="n">_data</span><span class="p">,</span> <span class="n">data</span><span class="p">);</span>
+        <span class="p">}</span>
+        <span class="p">[</span><span class="n">self</span> <span class="n">processData</span><span class="p">];</span>
+    <span class="p">}</span>
+<span class="p">});</span>
+</code></pre></div>
+
+
+<p>如果所有你想做的只是读取或者写入一个文件，GCD提供了两个方便的包装器：<em>dispatch_read</em>和<em>dispatch_write</em>。你需要传递给<em>dispatch_read</em>一个文件路径和一个在所有数据块读取完后调用的代码块。类似的，<em>dispatch_write</em>需要一个文件路径和一个被写入的<em>dispatch_data_t</em>对象。</p>
+
+<p><a id='benchmarking' name='benchmarking'> </a></p>
+
+<h3>9、基准测试</h3>
+
+<p>在GCD的一个不起眼的角落，你会发现一个适合优化代码的灵巧小工具：</p>
+
+<div class="highlight"><pre><code class="objc"><span class="kt">uint64_t</span> <span class="nf">dispatch_benchmark</span><span class="p">(</span><span class="kt">size_t</span> <span class="n">count</span><span class="p">,</span> <span class="kt">void</span> <span class="p">(</span><span class="o">^</span><span class="n">block</span><span class="p">)(</span><span class="kt">void</span><span class="p">));</span>
+</code></pre></div>
+
+
+<p>把这个声明放到你的代码中，你就能够测量给定的代码块执行的平均的纳秒数。例子如下：</p>
+
+<div class="highlight"><pre><code class="objc"><span class="kt">size_t</span> <span class="k">const</span> <span class="n">objectCount</span> <span class="o">=</span> <span class="mi">1000</span><span class="p">;</span>
+<span class="kt">uint64_t</span> <span class="n">n</span> <span class="o">=</span> <span class="n">dispatch_benchmark</span><span class="p">(</span><span class="mi">10000</span><span class="p">,</span> <span class="o">^</span><span class="p">{</span>
+    <span class="err">@</span><span class="n">autoreleasepool</span> <span class="p">{</span>
+        <span class="kt">id</span> <span class="n">obj</span> <span class="o">=</span> <span class="mi">@42</span><span class="p">;</span>
+        <span class="n">NSMutableArray</span> <span class="o">*</span><span class="n">array</span> <span class="o">=</span> <span class="p">[</span><span class="n">NSMutableArray</span> <span class="n">array</span><span class="p">];</span>
+        <span class="k">for</span> <span class="p">(</span><span class="kt">size_t</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">objectCount</span><span class="p">;</span> <span class="o">++</span><span class="n">i</span><span class="p">)</span> <span class="p">{</span>
+            <span class="p">[</span><span class="n">array</span> <span class="n">addObject</span><span class="o">:</span><span class="n">obj</span><span class="p">];</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+<span class="p">});</span>
+<span class="n">NSLog</span><span class="p">(</span><span class="s">@&quot;-[NSMutableArray addObject:] : %llu ns&quot;</span><span class="p">,</span> <span class="n">n</span><span class="p">);</span>
+</code></pre></div>
+
+
+<p>在我的机器上输出了：</p>
+
+<div class="highlight"><pre><code class="objc"><span class="o">-</span><span class="p">[</span><span class="n">NSMutableArray</span> <span class="n">addObject</span><span class="o">:</span><span class="p">]</span> <span class="o">:</span> <span class="mi">31803</span> <span class="n">ns</span>
+</code></pre></div>
+
+
+<p>也就是说添加1000个对象到<em>NSMutableArray</em>总共消耗了31803纳秒，或者说平均一个对象消耗32纳秒。</p>
+
+<p>正如<em>dispatch_benchmark</em>的<a href="http://opensource.apple.com/source/libdispatch/libdispatch-84.5/man/dispatch_benchmark.3">帮助界面</a>指出的，测量性能并非如看起来那样不重要。尤其是当比较并发代码和非并发代码时，你需要注意你的硬件上运行的特定计算带宽和内存带宽。不同的机器会很不一样。如果代码的性能与访问临界区有关，那么我们上面提到的锁竞争问题就会有所影响。</p>
+
+<p>不要把它放到发布代码中，事实上，这是无意义的，它是私有API。它只是在调试和性能分析上起作用。</p>
+
+<p>访问帮助界面：</p>
+
+<div class="highlight"><pre><code class="html">curl &quot;http://opensource.apple.com/source/libdispatch/libdispatch-84.5/man/dispatch_benchmark.3?txt&quot; 
+  | /usr/bin/groffer --tty -T utf8
+</code></pre></div>
+
+
+<p><a id='atomic_operations' name='atomic_operations'> </a></p>
+
+<h3>10、原子操作</h3>
+
+<p>头文件<em>libkern/OSAtomic.h</em>里有许多强大的函数，专门用来底层多线程编程。尽管它是内核头文件的一部分，它也能够在内核之外来帮助编程。</p>
+
+<p>这些函数都是很底层的，并且你需要知道一些额外的事情。就算你已经知道了，你还可能会发现一两件你不能做，或者不易做的事情。当你正在为高性能代码工作或者正在实现无锁的和无等待的算法工作时，这些函数会变得很有趣。</p>
+
+<p>这些函数在<em>atomic(3)</em>的帮助页里全部有概述——运行<em>man 3 atomic</em>命令以得到完整的文档。你会发现里面讨论到了内存屏障。查看维基百科中关于<a href="https://en.wikipedia.org/wiki/Memory_barrier">内存屏障</a>的文章。如果你不能确定，那么你很可能需要它。</p>
+
+<p><a id='counters' name='counters'> </a></p>
+
+<h4>10.1、计数器</h4>
+
+<p><em>OSAtomicIncrement</em>和<em>OSAtomicDecrement</em>有一个很长的函数列表允许你以原子操作的方式去增加和减少一个整数值，这不必使用锁（或者队列）同时也是线程安全的。如果你需要让一个全局的计数器值增加，而这个计数器为了统计目的而由多个线程操作，使用原子操作是很有帮助的。如果你要做的仅仅是增加一个全局计数器，那么无屏障版本的<em>OSAtomicIncrement</em>是很合适的，并且当没有锁竞争时，调用它们的代价很小。</p>
+
+<p>类似的，<em>OSAtomicOr</em>，<em>OSAtomicAnd</em>，<em>OSAtomicXor</em>的函数能用来进行逻辑运算，而<em>OSAtomicTest</em>可以用来设置和清除位。</p>
+
+<p><a id='compare_and_swap' name='compare_and_swap'> </a></p>
+
+<h4>10.2、比较和交换</h4>
+
+<p><em>OSAtomicCompareAndSwap</em>能用来做无锁的懒初始化，如下：</p>
+
+<div class="highlight"><pre><code class="objc"><span class="kt">void</span> <span class="o">*</span> <span class="nf">sharedBuffer</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="k">static</span> <span class="kt">void</span> <span class="o">*</span> <span class="n">buffer</span><span class="p">;</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">buffer</span> <span class="o">==</span> <span class="nb">NULL</span><span class="p">)</span> <span class="p">{</span>
+        <span class="kt">void</span> <span class="o">*</span> <span class="n">newBuffer</span> <span class="o">=</span> <span class="n">calloc</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1024</span><span class="p">);</span>
+        <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">OSAtomicCompareAndSwapPtrBarrier</span><span class="p">(</span><span class="nb">NULL</span><span class="p">,</span> <span class="n">newBuffer</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">buffer</span><span class="p">))</span> <span class="p">{</span>
+            <span class="n">free</span><span class="p">(</span><span class="n">newBuffer</span><span class="p">);</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="n">buffer</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div>
+
+
+<p>如果没有缓冲区，我们会创建一个然后自动将其写到<em>buffer</em>中如果<em>buffer</em>为NULL。在极稀少的情况下，其他人因为多线程也同时设置了<em>buffer</em>，我们简单的将其释放掉。因为比较和交换方法是原子的，所以它是一个线程安全的方式去懒初始化值。NULL的检测和设置buffer是以原子方式完成的。</p>
+
+<p>明显的，使用<em>dispatch_once()</em>我们也可以完成类似的事情。</p>
+
+<p><a id='atomic_queues' name='atomic_queues'> </a></p>
+
+<h4>10.3、原子队列</h4>
+
+<p><em>OSAtomicEnqueue()</em>和<em>OSAtomicDequeue()</em>可以让你实现一个LIFO队列，以线程安全，无锁的方式。对有潜在精确要求的代码来说，这会是强大的构建方式。</p>
+
+<p>还有<em>OSAtomicFifoEnqueue()</em>和<em>OSAtomicFifoDequeue()</em>是为了操作FIFO队列，但这些只有在头文件中才有文档——使用他们的时候要小心。</p>
+
+<p><a id='spin_locks' name='spin_locks'> </a></p>
+
+<h4>10.4、自旋锁</h4>
+
+<p>最后，OSAtomic.h头文件定义了使用自旋锁的函数：<em>OSSpinLock</em>。再次的，维基百科有深入的有关<a href="https://en.wikipedia.org/wiki/Spinlock">自旋锁</a>的信息。使用命令<em>man 3 spinlock</em>查看帮助页的<em>spinlock(3)</em>。当没有锁竞争时使用自旋锁代价很小。</p>
+
+<p>在合适的情况下，使用自旋锁对性能优化是很有帮助的。一如既往：先测量，然后优化。不要做乐观的优化。</p>
+
+<p>下面是OSSpinLock的一个例子：</p>
+
+<div class="highlight"><pre><code class="objc"><span class="k">@interface</span> <span class="nc">MyTableViewCell</span> : <span class="nc">UITableViewCell</span>
+
+<span class="k">@property</span> <span class="p">(</span><span class="n">readonly</span><span class="p">,</span> <span class="n">nonatomic</span><span class="p">,</span> <span class="n">copy</span><span class="p">)</span> <span class="n">NSDictionary</span> <span class="o">*</span><span class="n">amountAttributes</span><span class="p">;</span>
+
+<span class="k">@end</span>
+
+
+
+<span class="k">@implementation</span> <span class="nc">MyTableViewCell</span>
+<span class="p">{</span>
+    <span class="n">NSDictionary</span> <span class="o">*</span><span class="n">_amountAttributes</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="o">-</span> <span class="p">(</span><span class="n">NSDictionary</span> <span class="o">*</span><span class="p">)</span><span class="n">amountAttributes</span><span class="p">;</span>
+<span class="p">{</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">_amountAttributes</span> <span class="o">==</span> <span class="nb">nil</span><span class="p">)</span> <span class="p">{</span>
+        <span class="k">static</span> <span class="n">__weak</span> <span class="n">NSDictionary</span> <span class="o">*</span><span class="n">cachedAttributes</span> <span class="o">=</span> <span class="nb">nil</span><span class="p">;</span>
+        <span class="k">static</span> <span class="n">OSSpinLock</span> <span class="n">lock</span> <span class="o">=</span> <span class="n">OS_SPINLOCK_INIT</span><span class="p">;</span>
+        <span class="n">OSSpinLockLock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">lock</span><span class="p">);</span>
+        <span class="n">_amountAttributes</span> <span class="o">=</span> <span class="n">cachedAttributes</span><span class="p">;</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">_amountAttributes</span> <span class="o">==</span> <span class="nb">nil</span><span class="p">)</span> <span class="p">{</span>
+            <span class="n">NSMutableDictionary</span> <span class="o">*</span><span class="n">attributes</span> <span class="o">=</span> <span class="p">[[</span><span class="n">self</span> <span class="n">subtitleAttributes</span><span class="p">]</span> <span class="n">mutableCopy</span><span class="p">];</span>
+            <span class="n">attributes</span><span class="p">[</span><span class="n">NSFontAttributeName</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="n">UIFont</span> <span class="n">fontWithName</span><span class="o">:</span><span class="s">@&quot;ComicSans&quot;</span> <span class="n">size</span><span class="o">:</span><span class="mi">36</span><span class="p">];</span>
+            <span class="n">attributes</span><span class="p">[</span><span class="n">NSParagraphStyleAttributeName</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="n">NSParagraphStyle</span> <span class="n">defaultParagraphStyle</span><span class="p">];</span>
+            <span class="n">_amountAttributes</span> <span class="o">=</span> <span class="p">[</span><span class="n">attributes</span> <span class="n">copy</span><span class="p">];</span>
+            <span class="n">cachedAttributes</span> <span class="o">=</span> <span class="n">_amountAttributes</span><span class="p">;</span>
+        <span class="p">}</span>
+        <span class="n">OSSpinLockUnlock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">lock</span><span class="p">);</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="n">_amountAttributes</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div>
+
+
+<p>在上面的例子中，或许用不着这么麻烦，但它演示了一种理念。我们使用了ARC的<em>__weak</em>来确保一旦<em>MyTableViewCell</em>所有的实例都不存在，<em>amountAttributes</em>会调用<em>dealloc</em>。因此在所有的实例中，我们可以持有字典的一个单独实例。</p>
+
+<p>这段代码运行良好的原因是我们不太可能访问到函数内部的部分。这是很深奥的——不要在你的App中使用它，除非是你真正需要。</p>
+]]></content:encoded>
+    </item>
+    
+    <item>
+      <title>iOS开发之指定UIView的某几个角为圆角</title>
+      <link href="http://webfrogs.github.com/2013/05/22/ios-view-assign-corner-radius/"/>
+      <pubDate>2013-05-22T00:00:00+08:00</pubDate>
+      <author>webfrogs</author>
+      <guid>http://webfrogs.github.com/2013/05/22/ios-view-assign-corner-radius</guid>
+      <content:encoded><![CDATA[<p>如果需要将UIView的4个角全部都为圆角，做法相当简单，只需设置其Layer的<em>cornerRadius</em>属性即可（项目需要使用QuartzCore框架）。而若要指定某几个角（小于4）为圆角而别的不变时，这种方法就不好用了。</p>
+
+<p>对于这种情况，Stackoverflow上提供了<a href="http://stackoverflow.com/questions/2264083/rounded-uiview-using-calayers-only-some-corners-how">几种解决方案</a>。其中最简单优雅的方案，就是使用<em>UIBezierPath</em>。下面给出一段示例代码。</p>
+
+<div class="highlight"><pre><code class="objc"><span class="n">UIView</span> <span class="o">*</span><span class="n">view2</span> <span class="o">=</span> <span class="p">[[</span><span class="n">UIView</span> <span class="n">alloc</span><span class="p">]</span> <span class="n">initWithFrame</span><span class="o">:</span><span class="n">CGRectMake</span><span class="p">(</span><span class="mi">120</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">80</span><span class="p">,</span> <span class="mi">80</span><span class="p">)];</span>
+<span class="n">view2</span><span class="p">.</span><span class="n">backgroundColor</span> <span class="o">=</span> <span class="p">[</span><span class="n">UIColor</span> <span class="n">redColor</span><span class="p">];</span>
+<span class="p">[</span><span class="n">self</span><span class="p">.</span><span class="n">view</span> <span class="n">addSubview</span><span class="o">:</span><span class="n">view2</span><span class="p">];</span>
+    
+<span class="n">UIBezierPath</span> <span class="o">*</span><span class="n">maskPath</span> <span class="o">=</span> <span class="p">[</span><span class="n">UIBezierPath</span> <span class="n">bezierPathWithRoundedRect</span><span class="o">:</span><span class="n">view2</span><span class="p">.</span><span class="n">bounds</span> <span class="n">byRoundingCorners</span><span class="o">:</span><span class="n">UIRectCornerBottomLeft</span> <span class="o">|</span> <span class="n">UIRectCornerBottomRight</span> <span class="n">cornerRadii</span><span class="o">:</span><span class="n">CGSizeMake</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">10</span><span class="p">)];</span>
+<span class="n">CAShapeLayer</span> <span class="o">*</span><span class="n">maskLayer</span> <span class="o">=</span> <span class="p">[[</span><span class="n">CAShapeLayer</span> <span class="n">alloc</span><span class="p">]</span> <span class="n">init</span><span class="p">];</span>
+<span class="n">maskLayer</span><span class="p">.</span><span class="n">frame</span> <span class="o">=</span> <span class="n">view2</span><span class="p">.</span><span class="n">bounds</span><span class="p">;</span>
+<span class="n">maskLayer</span><span class="p">.</span><span class="n">path</span> <span class="o">=</span> <span class="n">maskPath</span><span class="p">.</span><span class="n">CGPath</span><span class="p">;</span>
+<span class="n">view2</span><span class="p">.</span><span class="n">layer</span><span class="p">.</span><span class="n">mask</span> <span class="o">=</span> <span class="n">maskLayer</span><span class="p">;</span>
+</code></pre></div>
+
+
+<p>其中，</p>
+
+<pre><code>byRoundingCorners:UIRectCornerBottomLeft | UIRectCornerBottomRight
+</code></pre>
+
+<p>指定了需要成为圆角的角。该参数是<em>UIRectCorner</em>类型的，可选的值有：</p>
+
+<pre><code>* UIRectCornerTopLeft
+* UIRectCornerTopRight
+* UIRectCornerBottomLeft
+* UIRectCornerBottomRight
+* UIRectCornerAllCorners
+</code></pre>
+
+<p>从名字很容易看出来代表的意思，使用“|”来组合就好了。</p>
+]]></content:encoded>
+    </item>
+    
+    <item>
+      <title>基于CocoaPods的iOS工程自动打包脚本实现</title>
+      <link href="http://webfrogs.github.com/2013/04/22/build-cocoapods-project/"/>
+      <pubDate>2013-04-22T00:00:00+08:00</pubDate>
+      <author>webfrogs</author>
+      <guid>http://webfrogs.github.com/2013/04/22/build-cocoapods-project</guid>
+      <content:encoded><![CDATA[<h3>关于CocoaPods</h3>
+
+<p>CocoaPods是一个用于管理iOS工程中所使用第三方开源库的工具，可以大大节省我们在工程中添加和配置第三方库所用的时间。关于CocoaPods的使用，推荐下面两篇博客。</p>
+
+<p><a href="http://blog.devtang.com/blog/2012/12/02/use-cocoapod-to-manage-ios-lib-dependency/">《使用CocoaPods来做iOS程序的包依赖管理》</a>作者：唐巧     <br/>
+<a href="http://www.iwangke.me/2013/04/18/advanced-cocoapods/#jtss-tsina">《CocoaPods进阶：本地包管理》</a>作者：王轲</p>
+
+<hr />
+
+<h3>自动打包脚本</h3>
+
+<p>认识到CocoaPods优点后，我便开始在工程中使用了。但在使用了CocoaPods之后，我发现我之前所写的一套iOS的CI脚本中的打包脚本无法完成对工程的自动打包操作了。分析了使用CocoaPods的工程后，对打包脚本做了一番修改。</p>
+
+<p>我所写的iOS工程的CI脚本项目地址：<a href="https://github.com/webfrogs/xcode_shell">点击这里</a>    <br/>
+使用的方法可以参见我的博文：<a href="http://webfrogs.me/2013/02/18/ios-automation/">《IOS工程自动打包并发布脚本实现》</a></p>
+
+<p>其中的“cocoapods-build”脚本，便是针对CocoaPods工程的打包脚本。</p>
+
+<hr />
+
+<h3>脚本使用</h3>
+
+<pre><code>cocoapods-build脚本绝对路径 参数1 参数2
+</code></pre>
+
+<p>参数1：cocoapods工程的根路径  <br/>
+参数2：工程configuration。默认为Release。</p>
+
+<p>打包完成后所生成的ipa文件位于工程根路径的“build”文件夹下的“ipa-build”文件夹中。</p>
+
+<hr />
+
+<h3>脚本分析</h3>
+
+<p>使用了CocoaPods后，会把当前的工程包含在一个workspace也就是工作空间中，这个工作空间里包含了两个工程：一个是我们自己的工程，另外一个，就是名为“Pods”的工程。CocoaPods会自动管理“Pods”工程，添加我们所需要的三方库，自动处理相关框架依赖。</p>
+
+<p>之前的“ipa-build”这个打包脚本，针对的是xcode工程来进行编译打包的。无法完成对工作空间的编译操作。于是便将脚本中使用xcodebuild编译的部分修改成如下的形式</p>
+
+<pre><code>xcodebuild -workspace *.xcwork* -scheme ${scheme_name} -configuration ${build_config} CONFIGURATION_BUILD_DIR=${compiled_path} ONLY_ACTIVE_ARCH=NO || exit
+</code></pre>
+
+<p>其中，-workspace说明是对工作空间进行编译，-scheme指定工程中配置的scheme，这里所取的值就是我们自己工程所一定的scheme。编译工作空间和编译工程不同的地方就是，编译工程默认会在工程跟路径下生成名为“build”的文件夹，而编译工作空间则不会，所以使用CONFIGURATION_BUILD_DIR来显式指定输出编译后的文件路径。</p>
+]]></content:encoded>
+    </item>
+    
+    <item>
+      <title>iOS单例的两种实现</title>
+      <link href="http://webfrogs.github.com/2013/04/01/ios-singleton/"/>
+      <pubDate>2013-04-01T00:00:00+08:00</pubDate>
+      <author>webfrogs</author>
+      <guid>http://webfrogs.github.com/2013/04/01/ios-singleton</guid>
+      <content:encoded><![CDATA[<p>单例模式算是开发中比较常见的一种模式了。在iOS中，单例有两种实现方式（至少我目前只发现两种）。根据线程安全的实现来区分，一种是使用<em>@synchronized</em>，另一种是使用GCD的<em>dispatch_once</em>函数。</p>
+
+<p>要实现单例，首先需要一个static的指向类本身的对象，其次需要一个初始化类函数。下面是两种实现的代码。</p>
+
+<p>1、@synchronized</p>
+
+<div class="highlight"><pre><code class="objc"><span class="k">static</span> <span class="n">InstanceClass</span> <span class="o">*</span><span class="n">instance</span><span class="p">;</span>
+<span class="k">+</span> <span class="p">(</span><span class="n">InstanceClass</span> <span class="o">*</span><span class="p">)</span><span class="nf">defaultInstance</span><span class="p">{</span>
+    <span class="k">@synchronized</span> <span class="p">(</span><span class="n">self</span><span class="p">){</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">instance</span> <span class="o">==</span> <span class="nb">nil</span><span class="p">)</span> <span class="p">{</span>
+            <span class="n">instance</span> <span class="o">=</span> <span class="p">[[</span><span class="n">InstanceClass</span> <span class="n">alloc</span><span class="p">]</span> <span class="n">init</span><span class="p">];</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+    
+    <span class="k">return</span> <span class="n">instance</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div>
+
+
+<p>2、GCD</p>
+
+<div class="highlight"><pre><code class="objc"><span class="k">static</span> <span class="n">InstanceClass</span> <span class="o">*</span><span class="n">instance</span><span class="p">;</span>
+<span class="k">+</span> <span class="p">(</span><span class="n">InstanceClass</span> <span class="o">*</span><span class="p">)</span><span class="nf">defaultInstance</span><span class="p">{</span>
+    <span class="k">static</span> <span class="kt">dispatch_once_t</span> <span class="n">onceToken</span><span class="p">;</span>
+    <span class="n">dispatch_once</span><span class="p">(</span><span class="o">&amp;</span><span class="n">onceToken</span><span class="p">,</span> <span class="o">^</span><span class="p">{</span>
+        <span class="n">instance</span> <span class="o">=</span> <span class="p">[[</span><span class="n">InstanceClass</span> <span class="n">alloc</span><span class="p">]</span> <span class="n">init</span><span class="p">];</span>
+    <span class="p">});</span>
+    
+    <span class="k">return</span> <span class="n">instance</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div>
+
+
+<p>总的来说，两种实现效果相同，但第二种GCD的实现方式写起来比较简单。如果不习惯GCD的方式，可以使用第一种方式。</p>
+]]></content:encoded>
+    </item>
+    
+    <item>
+      <title>git submodule的使用</title>
+      <link href="http://webfrogs.github.com/2013/03/20/git-submodule/"/>
+      <pubDate>2013-03-20T00:00:00+08:00</pubDate>
+      <author>webfrogs</author>
+      <guid>http://webfrogs.github.com/2013/03/20/git-submodule</guid>
+      <content:encoded><![CDATA[<p>开发过程中，经常会有一些通用的部分希望抽取出来做成一个公共库来提供给别的工程来使用，而公共代码库的版本管理是个麻烦的事情。今天无意中发现了git的git submodule命令，之前的问题迎刃而解了。</p>
+
+<h3>添加</h3>
+
+<p>为当前工程添加submodule，命令如下：</p>
+
+<pre><code>git submodule add 仓库地址 路径
+</code></pre>
+
+<p>其中，仓库地址是指子模块仓库地址，路径指将子模块放置在当前工程下的路径。  <br/>
+<strong>注意：</strong>路径不能以 / 结尾（会造成修改不生效）、不能是现有工程已有的目录（不能順利 Clone）</p>
+
+<p>命令执行完成，会在当前工程根路径下生成一个名为“.gitmodules”的文件，其中记录了子模块的信息。添加完成以后，再将子模块所在的文件夹添加到工程中即可。</p>
+
+<h3>删除</h3>
+
+<p>submodule的删除稍微麻烦点：首先，要在“.gitmodules”文件中删除相应配置信息。然后，执行“git rm –cached ”命令将子模块所在的文件从git中删除。</p>
+
+<h3>下载的工程带有submodule</h3>
+
+<p>当使用git clone下来的工程中带有submodule时，初始的时候，submodule的内容并不会自动下载下来的，此时，只需执行如下命令：</p>
+
+<pre><code>git submodule update --init --recursive
+</code></pre>
+
+<p>即可将子模块内容下载下来后工程才不会缺少相应的文件。</p>
+]]></content:encoded>
+    </item>
+    
+    <item>
+      <title>《View Programming Guide for iOS》阅读笔记</title>
+      <link href="http://webfrogs.github.com/2013/03/13/read-note-view/"/>
+      <pubDate>2013-03-13T00:00:00+08:00</pubDate>
+      <author>webfrogs</author>
+      <guid>http://webfrogs.github.com/2013/03/13/read-note-view</guid>
+      <content:encoded><![CDATA[<p>文档地址: <a href="http://developer.apple.com/library/ios/#documentation/windowsviews/conceptual/viewpg_iphoneos/Introduction/Introduction.html#//apple_ref/doc/uid/TP40009503-CH1-SW2">《View Programming Guide for iOS》</a></p>
+
+<h2>View and Window Architecture</h2>
+
+<hr />
+
+<ul>
+<li><h4>视图绘制周期</h4>
+
+<p>UIView类使用了请求式绘制模型来展示内容。当一个视图第一次出现在屏幕上时，系统要求它绘制自己的内容。系统截取视图内容的一个快照，并且将这个快照用于视图的可视化呈现。如果视图内容永远不改变，那么这个视图的绘图代码可能永远都不会再次调用。这个快照的图片在大部分涉及到该视图的操作中被重复使用。如果改变了视图内容，则需要通知系统视图发生了改变。之后视图会重复绘制过程并且为新的绘制结果截取一个快照。</p></li>
+</ul>
+
+
+<p>当视图内容发生改变时，不需要直接重绘这些改变。相反，通过调用函数<em>setNeedsDisplay</em> 或者<em>setNeedsDisplayInRect:</em>来使当前视图无效。这些函数会告诉系统视图的内容发生改变并且需要在下次时机到来时重绘。系统会一直等到当前的run loop结束后，才会开始任何绘制操作。这个延迟，给了你一个机会去废止多个视图，从当前视图层级中添加或者删除视图，隐藏视图，重设视图大小，和重定位视图。所有的这些改变稍后会再同一时间呈现。</p>
+
+<p>备注：改变视图的几何结构并不会让系统自动重绘视图内容。视图的<em>contentMode</em>属性决定了视图几何结构的改变该如何解析。大部分的content modes只是在视图的边界中拉伸或者重定位已经存在的视图快照而不需要重新创建一个快照。</p>
+
+<p>当绘制视图内容的时刻到来时，真正的绘制过程会根据视图和它的配置而有所不同。系统视图通常是实现自己的私有绘图函数来重绘内容。这些一样的系统视图通常会暴露一些接口，以便能用来配置视图实际的外观。对于自定义的UIView的子类，典型的应该重写视图的<em>drawRect:</em>函数，使用它来绘制视图内容。当然也存在一些其他的方法去提供视图的内容，比如直接设置内容下的图层。但是重写<em>drawRect:</em>函数是使用最多的技术。</p>
+
+<ul>
+<li><p>UIKit框架的坐标原点位于左上角，x轴向右延伸，y轴向下延伸。而Core Graphics和OpenGL ES的坐标系统原点则在左下角，y轴向上延伸，x轴向右延伸。</p></li>
+<li><p>UIView属性中的frame和center是相对于父视图的坐标系统的。而bounds属性相对于自身的坐标系统，故bounds默认的point位置是(0,0)，大小与frame相同</p></li>
+<li><p>改变视图的transform属性时，所有变形都是相对于视图中心点也就是center属性的。</p></li>
+<li><p>在视图的drawRect:方法中，可以使用仿射变换来定位和确定需要绘制的元素。相比于在视图的某个地点固定一个对象的位置，相对于一个固定点（通常是(0,0)）来创建每个对象是更为简单的。在绘制之前使用transform就能做到这点。在这种情况下，如果视图中的对象位置发生改变，只需要修改这个transform即可，这比在新的位置重新创建对象要快速并且花销更小。可以使用CGContextGetCTM函数来检索图形上下文的仿射变换矩阵，在绘制过程中也可以使用Core Graphics的相关函数来设置CTM.</p>
+
+<p>CTM(current transformation matrix)是任何时候都被使用的仿射变换，当操作的是整个视图时，CTM就是视图的transform属性。在drawRect:方法中，CTM与当前活动的图形上下文有关</p></li>
+<li><p>当一个视图的transform属性不是identity transform时，这个视图的frame属性就是未定义并且必须被忽视的。此时，你必须使用视图的bounds和center属性来获得视图的大小和位置。该视图的任何子视图的frame矩形依然是有效的，因为它们是基于父视图的bounds属性的。</p></li>
+<li><p>一个点并不一定对应着屏幕上的一个像素</p></li>
+<li>对于显式定义了drawRect:方法的视图来说，UIKit负责调用这个方法。这个方法中的实现应该尽可能快地重绘视图的指定区域并且不应该做别的任何事情。不要在这里做额外的布局，也不要改变应用的数据模型。这个方法的唯一目的就是更新视图的可视内容。</li>
+<li>自定义视图需要重写的事件处理函数有<em>touchesBegan:withEvent:</em>， <em>touchesMoved:withEvent:</em>， <em>touchesEnded:withEvent:</em>， <em>touchesCancelled:withEvent:</em> 如果使用了手势识别来处理事件，则不需要重写这些函数。如果视图不包含任何子视图或者它的尺寸不发生改变，也不需要重写<em>layoutSubviews</em>函数。最后，当视图内容在运行时发生改变，同时使用了UIKit或者Core Graphics来绘制图形，则需要重写<em>drawRect:</em>函数。</li>
+</ul>
+
+
+<h2>Windows</h2>
+
+<hr />
+
+<ul>
+<li><p>每个iOS应用程序至少包含一个窗口。窗口通常座位一个或者多个视图的空白容器。同时，应用程序也不通过展示新的窗口来改变内容。如果想要这么做，改变窗口最前面的视图来完成。</p></li>
+<li><p>当创建窗口时，应该总是将窗口的大小设置为充满屏幕的边界。不应该为了容纳状态栏或者其他元素而减去窗口大小。无论何时，状态栏总是浮在窗口的上面的。所以应该是放入到窗口中的视图来缩减大小去适应状态栏。如果是使用视图控制器，则视图控制器应该自动处理视图大小。</p></li>
+<li><p>窗口有等级概念，每个<em>UIWindow</em>对象都有一个可配置的<em>windowLevel</em>属性。通常不需要改变应用程序的窗口等级。新的窗口在创建时，会自动指派为正常窗口等级。高窗口等级是出现在应用程序内容之上的必要信息，比如系统状态栏和alert消息。虽然可以手动将窗口设置为这样的等级，但当使用到特殊接口时，通常系统会做好这些事情。举例来说，当显示隐藏状态栏，或者显示一个alert视图时，系统会自动创建必要的窗口去显示这些内容。</p></li>
+<li><p>当应用程序进入到后台时，窗口改变通知并不会被传递。因为当程序进入后台时尽管窗口不在屏幕上显示了，但在应用程序环境中，窗口依然被认为是可见的。</p></li>
+<li><p>retina屏的iOS设备可以外接显示设备。</p></li>
+</ul>
+
+
+<h2>Views</h2>
+
+<hr />
+
+<ul>
+<li>使用编程方法来创建视图时，视图创建代码一般放在视图控制器的<em>loadView</em>函数中。无论是使用编程或者nib文件来创建视图，都可以在<em>viewDidLoad</em>函数中添加视图的配置代码。</li>
+<li>父视图会自动retain子视图，所以当添加了一个子视图后，release子视图的操作是安全的。事实上，推荐这么做，因为它能防止应用程序保持太多的视图而导致的内存泄露。记住，如果从父视图中移除了子视图后，还想继续使用子视图，必须对子视图做retain操作。<em>removeFromSuperview</em>函数会在子视图从父视图中移除后，自动释放子视图。如果没有在下一个时间循环周期前做retain操作，这个视图将会被释放。</li>
+<li>UIView的<em>window</em>属性代表当前正在显示的视图所在的窗口。对于当前在屏幕上显示的视图来说，窗口对象就是它们所在视图层次的根视图。</li>
+<li>如果隐藏的视图是first responder，这个视图不会自动的取消自己first responder的状态。以first responder为目标的事件依然会被传递到这个隐藏的视图。为了防止这种情况发生，应该在隐藏视图时，强制使其取消first responder状态。</li>
+<li>当包含了旋转因子的视图做矩形转换时，看如下的图：</li>
+</ul>
+
+
+<p><img src="http://developer.apple.com/library/ios/documentation/windowsviews/conceptual/viewpg_iphoneos/Art/uiview_convert_rotated.jpg" alt="图片" /></p>
+
+<ul>
+<li><p>如果一个视图的<em>transform</em>属性不是identity transform，那么它的frame和autoresizing行为结果都是未定义的。</p></li>
+<li><p>视图在初始化过程之前调用UIView类方法<em>layerClass</em>，并且使用返回的类来创建layer对象。此外，视图总是会指定自己本身作为layer对象的代理。在这点上，视图拥有着图层，并且视图和图层之前的关系必须不能改变。也就是说，不能指定相同的视图作为另一个图层对象的代理。改变这种所属关系或者代理关系，都可能会导致视图绘制的错误，并且应用程序存在潜在的crash问题。</p></li>
+<li><p>通过创建UIView的子类，重写<em>layerClass</em>类函数可以改变创建图层时的默认的CALayer类。</p></li>
+<li>自定义的layer不接收事件，也不参与到responder chain中，但是它们绘制自身，并且根据Core Animation的规则，在他们的父视图或者父图层中响应大小变化。</li>
+<li>CGRectGetMidX(),CGRectGetMidY()两个函数可以分别得到一个frame的中心点的x坐标和y坐标。</li>
+<li>CALayer的属性<em>position</em>就是中心点，和UIView的属性<em>center</em>效果相同。</li>
+<li>自定义的视图类，如果是通过代码来创建，则需要重写<em>initWithFrame:</em>初始化函数。而若是从nib文件中加载，则需要重写<em>initWithCoder:</em>函数。<strong>注意：</strong>nib加载的视图并不会调用<em>initWithFrame:</em>函数。</li>
+<li>视图默认的行为是一次只响应一个touch。如果用户按下了第二个手指，系统会忽视这个touch事件并且不会将它报告给视图。如果希望在视图的事件处理函数中跟踪多手指手势，需要设置视图的<em>multipleTouchEnabled</em>属性为YES来使多点触摸事件生效。</li>
+</ul>
+
+]]></content:encoded>
+    </item>
+    
+    <item>
+      <title>IOS官方文档阅读之动画</title>
+      <link href="http://webfrogs.github.com/2013/03/11/ios-animations/"/>
+      <pubDate>2013-03-11T00:00:00+08:00</pubDate>
+      <author>webfrogs</author>
+      <guid>http://webfrogs.github.com/2013/03/11/ios-animations</guid>
+      <content:encoded><![CDATA[<h3>写于开头</h3>
+
+<hr />
+
+<p>最近开始阅读苹果IOS开发文档，发现果然还是官方文档里有价值的东西多。之后会随着阅读的进度，陆续写一些的阅读文章，大部分是文档内容的摘录（英文不太好，有些地方翻译会有些生硬）。将所看到的有帮助的文档中的内容记录下来，也算是一种总结。</p>
+
+<p>本文所对应的官方文档：<a href="http://developer.apple.com/library/ios/#documentation/windowsviews/conceptual/viewpg_iphoneos/Introduction/Introduction.html#//apple_ref/doc/uid/TP40009503-CH1-SW2">《View Programming Guide for iOS》</a>
+其中的Animations部分。</p>
+
+<h3>动画</h3>
+
+<hr />
+
+<h5>什么能够使用动画</h5>
+
+<p>UIKit框架和Core Animation都提供了对动画的支持，但是这两种技术对动画的支持程度有所不同。UIKit框架是通过UIView对象来支持动画的。UIView包含了一些支持动画的属性，但这并不意味着动画会自动产生。改变这些属性通常只是立即更新UIView对象的属性值，并不会有动画产生。想要使这些改变产生动画，你必须在一个动画块中改变这些属性值。</p>
+
+<p>以下列出UIView中支持动画的属性:</p>
+
+<ul>
+<li>frame</li>
+<li>bounds</li>
+<li>center</li>
+<li>transform</li>
+<li>alpha</li>
+<li>backgroundColor</li>
+<li>contentStretch</li>
+</ul>
+
+
+<p>在一些需要展示更复杂动画或者不被UIView类所支持的动画的场合，能够使用Core Animation和视图下面的图层来创建动画。由于视图和图层对象是错综联系在一起的，所以改变视图的涂层会影响到视图本身。使用Core Animation，你能为一下视图图层的改变添加动画：</p>
+
+<ul>
+<li>图层的大小和位置</li>
+<li>执行变形时的中心点</li>
+<li>3D空间中图层以及其子图层的变形</li>
+<li>图层从其所在图层层级中的添加或者删除</li>
+<li>图层与其兄弟图层间的Z-order关系</li>
+<li>图层的阴影</li>
+<li>图层的边框(包括图层是否圆角)</li>
+<li>改变大小操作中图层部分的拉伸</li>
+<li>图层的不透明度</li>
+<li>子图层在父图层边框以外部分的裁剪行为</li>
+<li>图层当前的内容</li>
+<li>图层的光栅化行为</li>
+</ul>
+
+
+<p><strong>注意：</strong>如果视图包含了自定义的图层对象——也就是说，图层对象没有关联的视图——任何该图层的变化动画，都必须使用Core Animation来完成。</p>
+
+<h5>视图动画属性的改变</h5>
+
+<p>UIView类对象属性改变所产生动画的代码写法有两种：如果在iOS4以后的系统，可以使用代码块对象，更早的系统中可以使用Begin/Commit函数。</p>
+
+<p>代码块可以使用的函数：</p>
+
+<ul>
+<li>animateWithDuration:animations:</li>
+<li>animateWithDuration:animations:completion:</li>
+<li>animateWithDuration:delay:options:animations:completion:</li>
+</ul>
+
+
+<p>以上这些函数，都是UIView的类函数。正是由于是类函数，在其中的动画块代码不仅仅只展示单一的视图，可以包含多个视图的变化。</p>
+
+<p>如果应用程序是运行在iOS3.2及更早的版本，需要使用UIView的以下两个类函数：</p>
+
+<pre><code>beginAnimations:context: 
+commitAnimations
+</code></pre>
+
+<p>来定义动画代码块。这两个函数标记了动画代码块的开始和结束位置。</p>
+
+<p><strong>注意：</strong>如果所写的应用程序是运行在iOS4及以上的环境中，应该使用基于块的函数</p>
+
+<p>默认情况下，在一个动画块中所有动画属性的改变都会被展示。如果只希望其中一部分的变化以动画来表示，其余的不用。那么使用<em>setAnimationsEnabled:</em>函数可以暂时使动画失效，之后做任何不想使用动画的改变，然后再调用一次<em>setAnimationsEnabled:</em>函数来启用动画。还能通过调用<em>areAnimationsEnabled</em>函数来查看当前动画的可用状态。</p>
+
+<h5>为Begin/Commit函数配置参数</h5>
+
+<p>Begin/Commit函数有许多动画参数可以配置，需要通过使用UIView的一些类函数来完成。</p>
+
+<p>配置参数的函数列表详见文档。</p>
+
+<h5>设置动画代理</h5>
+
+<p>如果希望在一段动画结束之后立即执行一段代码，需要为Begin/Commit函数关联一个代理对象和一个开始或者结束的选择器。通过UIView的类函数<em>setAnimationDelegate:</em>设置代理对象，类函数<em>setAnimationWillStartSelector:</em>和<em>setAnimationDidStopSelector:</em>设置开始结束选择器。</p>
+
+<p>动画代理方法应该与以下形式类似：</p>
+
+<pre><code>- (void)animationWillStart:(NSString *)animationID context:(void *)context;
+- (void)animationDidStop:(NSString *)animationID finished:(NSNumber *)finished context:(void *)context;
+</code></pre>
+
+<h5>改变一个视图的子视图</h5>
+
+<p>当一个视图的子视图发生改变时，若需要动画来过渡，则需要使用函数<em>transitionWithView:duration:options:animations:completion:</em>来完成。</p>
+
+<h5>使用一个视图来替换另一个视图</h5>
+
+<p>当使用一个视图来替换另一个视图时，若需要动画过渡，则需要使用函数<em>transitionFromView:toView:duration:options:completion:</em>来完成</p>
+
+<h5>其他</h5>
+
+<p>可以使用完成块或者代理函数来完成多个动画的连接。</p>
+
+<p>基于视图和基于图层的动画可以混合在一起使用。</p>
+]]></content:encoded>
+    </item>
+    
+    <item>
+      <title>IOS工程自动打包并发布脚本实现</title>
+      <link href="http://webfrogs.github.com/2013/02/18/ios-automation/"/>
+      <pubDate>2013-02-18T00:00:00+08:00</pubDate>
+      <author>webfrogs</author>
+      <guid>http://webfrogs.github.com/2013/02/18/ios-automation</guid>
+      <content:encoded><![CDATA[<h3>前言</h3>
+
+<hr />
+
+<p>IOS的开发过程中，当需要给测试人员发布测试包的时候，直接使用xcode来做的效率是非常低下的。尤其是当有一点小改动需要重新出包时，那简直是个折磨的人的工作。通过一番研究后，遂决定写一系列脚本，以代替人工完成打包和发布的过程。</p>
+
+<p>目前脚本已经完成，基本可以满足我目前的需求。现将其开源，托管在github上，项目地址：<a href="https://github.com/webfrogs/xcode_shell">点击这里</a></p>
+
+<h3>思路</h3>
+
+<hr />
+
+<p>借助xcode所附带的“Command Line Tools”，可以通过命令行来完成IOS工程的编译和打包工作。脚本正是基于此完成的。</p>
+
+<p>本套脚本分为三个部分：负责编译工程并打包的脚本ipa-build，负责生成itms-services协议文件的脚本ipa-publish，以及负责将ipa-publish脚本生成文件上传到服务器的脚本upload。</p>
+
+<p>其中，由于我自己的情况是服务器端的同事给我了内部测试服务器的sftp的上传权限，所以这个upload脚本主要实现了使用sftp来上传的功能。具体可以实际情况来做修改。</p>
+
+<p>关于itms-services协议的一些内容，可以参考我之前的文章:<a href="/2012/09/27/ipapublsh/">《shell脚本实现ipa一键安装(itms-services协议)》</a></p>
+
+<p><strong>注意：</strong>默认安装完的xcode并没有自带“Command Line Tools”，需要在xcode中选择后下载才能使用</p>
+
+<h3>实现</h3>
+
+<hr />
+
+<p>打开工程后，会发现本套脚本中包含好几个shell文件。下面对其功能做说明：</p>
+
+<pre><code>ipa-build:  编译xcode工程并生成ipa文件
+ipa-publish: 生成符合itms-services协议的文件，并发布到服务器。
+sendEmail:  stmp发送email的脚本。（别人写的）
+sftpDownloadFile: 通过sftp协议下载文件
+sftpUploadFile: 通过sftp协议上传文件
+updateLocalIndexHtml:   对索引文件进行处理(二进制文件，非shell脚本)
+uploadItemsServicesFiles:   将itms-services协议文件上传到服务器
+</code></pre>
+
+<p>实际使用的脚本，只有"ipa-build"和"ipa-publish"这两个。其他文件会被ipa-publish这个脚本调用的依赖文件。其中出了"updateLocalIndexHtml"是我用objc写的一个用来进行文本处理的编译后的二进制文件，其余均为shell脚本。</p>
+
+<p>shell脚本实现，大家可以打开脚本来看一下，里面的注释算是很详细了。不需要太多说明。</p>
+
+<p>其中值得一提的就是我在写sftp协议上传功能的时候，碰到了一个问题就是使用脚本来自动输入密码，也就是交互式脚本的编写。最后选择了expect来完成，因为我发现mac系统里自带了这个expect命令。</p>
+
+<h3>使用</h3>
+
+<hr />
+
+<p>在编写脚本时，我已经考虑到，要尽量使这个脚本使用起来简单方便。如果只需要打包，那么只使用ipa-build脚本即可。如果需要用itms-services协议来发布，则再运行ipa-publish脚本即可。在ipa-publish脚本中调用了upload脚本，所以upload脚本不需要单独使用。</p>
+
+<p>ipa-build脚本使用方法：</p>
+
+<pre><code>ipa-build脚本绝对路径 参数1 参数2
+</code></pre>
+
+<p>其中，参数1是IOS工程的根路径,是必输项。参数2可以不输入，是可选的，含义是编译时的工程configuration类型，有4种类型可选：Debug, AdHoc,Release， Distribution。默认是Release。</p>
+
+<p>ipa-build脚本运行后，会在IOS工程根路径下生成名为“build”的文件夹，在这个文件夹中又有一个名为“ipa-build”的文件夹，打包所生成的最新ipa包就在其中。</p>
+
+<p>ipa-publish脚本使用方法:</p>
+
+<pre><code>ipa-publish脚本绝对路径 参数1 参数2
+</code></pre>
+
+<p>参数1是IOS工程的根路径,是必输项。参数2是可选的，含义是当上传文件成功后是否发送email通知，y为发送，n为不发送，默认的值是不发送。</p>
+
+<p>ipa-publish脚本运行后，会在“build”文件夹中生成一个以工程的targetname为名字的文件夹。其中，存放了itms-services协议所需的所有文件。脚本会将里面内容全部上传到服务器中。</p>
+
+<h3>注意事项</h3>
+
+<hr />
+
+<p>1、运行脚本需要绝对路径，不能使用相对路径。</p>
+
+<p>2、脚本下载后,若要使用，有些脚本需要一些改动。</p>
+
+<p>其中ipa-build脚本无须更改。可以直接使用。ipa-publish脚本需要配置一些信息后方能正常使用。</p>
+
+<p>用文本打开ipa-publish脚本后，在shell开始的地方，有一段需要配置的地方，如下：</p>
+
+<pre><code>#须配置内容  start
+
+#sftp参数设置
+sftp_server=192.168.xx.xx
+sftp_username=xx
+sftp_password=xx
+sftp_workpath="/usr/share/xx/xx/xx"
+
+#发布应用的url地址
+pulish_url="http://xx.com/xx"
+
+#以下是邮箱的相关设置
+#收件人
+email_reciver=xx@xx.com
+#发送者邮箱
+email_sender=xx@xx.com
+#邮箱用户名
+email_username=xx
+#邮箱密码
+email_password=xx
+#smtp服务器地址
+email_smtphost=smtp.exmail.qq.com
+
+
+#可配置内容  end
+</code></pre>
+
+<p>根据实际情况配置即可。</p>
+]]></content:encoded>
+    </item>
+    
+    <item>
+      <title>IOS开发之自定义键盘</title>
+      <link href="http://webfrogs.github.com/2013/01/30/ios-custom-keyboard/"/>
+      <pubDate>2013-01-30T00:00:00+08:00</pubDate>
+      <author>webfrogs</author>
+      <guid>http://webfrogs.github.com/2013/01/30/ios-custom-keyboard</guid>
+      <content:encoded><![CDATA[<p>实际开发过程中，会有自定义键盘的需求，比如，需要添加一个表情键盘。本文提供一种解决方法，思路就是通过获取系统键盘所在的view，然后自定义一个view覆盖在系统键盘view上，接下来的事情就非常简单了，就是在自定义的view里做任何自己想做的事情。</p>
+
+<p>这个方法的关键在于获取系统键盘所在的view。要完成这个，需要监听UIKeyboardDidShowNotification这个系统通知（注意：如果在UIKeyboardWillShowNotification这个系统通知里处理是不会得到键盘所在view的）。代码如下：</p>
+
+<div class="highlight"><pre><code class="objc"><span class="p">[[</span><span class="n">NSNotificationCenter</span> <span class="n">defaultCenter</span><span class="p">]</span> <span class="n">addObserver</span><span class="o">:</span><span class="n">self</span> <span class="n">selector</span><span class="o">:</span><span class="k">@selector</span><span class="p">(</span><span class="n">keyboardDidShow</span><span class="o">:</span><span class="p">)</span> <span class="n">name</span><span class="o">:</span><span class="n">UIKeyboardDidShowNotification</span> <span class="n">object</span><span class="o">:</span><span class="nb">nil</span><span class="p">];</span>
+</code></pre></div>
+
+
+<p>keyboardDidShow函数实现：</p>
+
+<div class="highlight"><pre><code class="objc"><span class="k">-</span> <span class="p">(</span><span class="kt">void</span><span class="p">)</span><span class="nf">keyboardDidShow:</span><span class="p">(</span><span class="n">NSNotification</span> <span class="o">*</span><span class="p">)</span><span class="nv">notification</span><span class="p">{</span>
+    <span class="n">UIView</span> <span class="o">*</span><span class="n">keyboardView</span> <span class="o">=</span> <span class="p">[</span><span class="n">self</span> <span class="n">getKeyboardView</span><span class="p">];</span>
+<span class="p">}</span>
+</code></pre></div>
+
+
+<p>关键函数getKeyboardView的实现，该函数返回键盘所在view：</p>
+
+<div class="highlight"><pre><code class="objc"><span class="k">-</span> <span class="p">(</span><span class="n">UIView</span> <span class="o">*</span><span class="p">)</span><span class="nf">getKeyboardView</span><span class="p">{</span>
+    <span class="n">UIView</span> <span class="o">*</span><span class="n">result</span> <span class="o">=</span> <span class="nb">nil</span><span class="p">;</span>
+    <span class="n">NSArray</span> <span class="o">*</span><span class="n">windowsArray</span> <span class="o">=</span> <span class="p">[</span><span class="n">UIApplication</span> <span class="n">sharedApplication</span><span class="p">].</span><span class="n">windows</span><span class="p">;</span>
+    <span class="k">for</span> <span class="p">(</span><span class="n">UIView</span> <span class="o">*</span><span class="n">tmpWindow</span> <span class="k">in</span> <span class="n">windowsArray</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">NSArray</span> <span class="o">*</span><span class="n">viewArray</span> <span class="o">=</span> <span class="p">[</span><span class="n">tmpWindow</span> <span class="n">subviews</span><span class="p">];</span>
+        <span class="k">for</span> <span class="p">(</span><span class="n">UIView</span> <span class="o">*</span><span class="n">tmpView</span>  <span class="k">in</span> <span class="n">viewArray</span><span class="p">)</span> <span class="p">{</span>
+            <span class="k">if</span> <span class="p">([[</span><span class="n">NSString</span> <span class="n">stringWithUTF8String</span><span class="o">:</span><span class="n">object_getClassName</span><span class="p">(</span><span class="n">tmpView</span><span class="p">)]</span> <span class="n">isEqualToString</span><span class="o">:</span><span class="s">@&quot;UIPeripheralHostView&quot;</span><span class="p">])</span> <span class="p">{</span>
+                <span class="n">result</span> <span class="o">=</span> <span class="n">tmpView</span><span class="p">;</span>
+                <span class="k">break</span><span class="p">;</span>
+            <span class="p">}</span>
+        <span class="p">}</span>
+        
+        <span class="k">if</span> <span class="p">(</span><span class="n">result</span> <span class="o">!=</span> <span class="nb">nil</span><span class="p">)</span> <span class="p">{</span>
+            <span class="k">break</span><span class="p">;</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+    
+    <span class="k">return</span> <span class="n">result</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div>
+
+
+<p>下面的事情就简单了，只要自定义一个view，并调用上面得到的keyboardView的addSubView函数，即可将自定义view覆盖在键盘view之上。然后，做自己想做的事情吧。</p>
+
+<p>提供一个DEMO，链接：<a href="https://github.com/webfrogs/CustomKeyboardDemo">https://github.com/webfrogs/CustomKeyboardDemo</a></p>
+]]></content:encoded>
+    </item>
+    
+    <item>
+      <title>IOS开发之细节知识点汇总</title>
+      <link href="http://webfrogs.github.com/2013/01/14/ios-problem-solved/"/>
+      <pubDate>2013-01-14T00:00:00+08:00</pubDate>
+      <author>webfrogs</author>
+      <guid>http://webfrogs.github.com/2013/01/14/ios-problem-solved</guid>
+      <content:encoded><![CDATA[<p>单独写一篇文章，用于记录在IOS开发中碰到的一些细节上的零碎问题的解决方法。</p>
+
+<hr />
+
+<ul>
+<li><h4>使用命令将模拟器所用静态库和真机所用静态库合并成为一个</h4>
+
+<p>  lipo -create XXX.a XXX.a -output XXX.a</p></li>
+<li><h4>使用MFMailComposeViewController来发送邮件导致程序crash</h4>
+
+<p>不能直接将其初始化后使用，当系统中没有设置邮件账户时，会引起使用的应用程序崩溃。具体解决方法，参见链接：<a href="http://blog.csdn.net/fxj281314/article/details/6010831">http://blog.csdn.net/fxj281314/article/details/6010831</a></p></li>
+</ul>
+
+
+<hr />
+
+<ul>
+<li><h4>UIImageView中图片按原比例裁剪放置</h4>
+
+<p>设置两个属性即可：</p></li>
+</ul>
+
+
+<div class="highlight"><pre><code class="objc"><span class="n">imageView</span><span class="p">.</span><span class="n">clipsToBounds</span> <span class="o">=</span> <span class="nb">YES</span><span class="p">;</span>        <span class="c1">// 不显示子视图超出部分</span>
+<span class="n">imageView</span><span class="p">.</span><span class="n">contentMode</span> <span class="o">=</span> <span class="n">UIViewContentModeScaleAspectFill</span><span class="p">;</span> <span class="c1">// 保持原比例裁剪</span>
+</code></pre></div>
+
+
+<hr />
+
+<ul>
+<li><h4>系统键盘弹出时获取键盘的相关信息</h4>
+
+<p>监听键盘的系统通知：UIKeyboardWillHideNotification或者UIKeyboardDidShowNotification，在其处理函数中，可以得到键盘的相关信息.例如：</p></li>
+</ul>
+
+
+<div class="highlight"><pre><code class="objc"><span class="k">-</span> <span class="p">(</span><span class="kt">void</span><span class="p">)</span><span class="nf">keyboardDidShow:</span><span class="p">(</span><span class="n">NSNotification</span> <span class="o">*</span><span class="p">)</span><span class="nv">noti</span><span class="p">{</span>
+    <span class="n">NSDictionary</span> <span class="o">*</span><span class="n">userInfo</span> <span class="o">=</span> <span class="p">[</span><span class="n">noti</span> <span class="n">userInfo</span><span class="p">];</span>
+    
+    <span class="n">NSValue</span><span class="o">*</span> <span class="n">aValue</span> <span class="o">=</span> <span class="p">[</span><span class="n">userInfo</span> <span class="n">objectForKey</span><span class="o">:</span><span class="n">UIKeyboardFrameEndUserInfoKey</span><span class="p">];</span>
+    <span class="n">CGSize</span> <span class="n">keyboardSize</span> <span class="o">=</span> <span class="p">[</span><span class="n">aValue</span> <span class="n">CGRectValue</span><span class="p">].</span><span class="n">size</span><span class="p">;</span>
+    <span class="kt">float</span> <span class="n">keyboardHeight</span> <span class="o">=</span> <span class="n">keyboardSize</span><span class="p">.</span><span class="n">height</span><span class="p">;</span>  <span class="c1">// 得到键盘高度</span>
+    <span class="kt">float</span> <span class="n">keyBoardOriginY</span> <span class="o">=</span> <span class="n">aValue</span><span class="p">.</span><span class="n">CGRectValue</span><span class="p">.</span><span class="n">origin</span><span class="p">.</span><span class="n">y</span><span class="p">;</span>  <span class="c1">// 得到键盘弹出后的键盘视图所在y坐标</span>
+        
+<span class="p">}</span>
+</code></pre></div>
+
+
+<p>上面的函数中，就得到了键盘的高度和键盘view的y坐标。</p>
+
+<p><em>注意：</em></p>
+
+<p>1、如果UITextView或者UITextField有inputAccessoryView属性，则键盘高度包括inputAccessoryView属性的view的高度。</p>
+
+<p>2、键盘所在的y坐标是以整个屏幕的坐标为参照的。在实际使用中，通常需要减去上方状态栏的高度，即减去20.</p>
+
+<ul>
+<li><h4>将UIView转换为UIImage并保存到文件</h4></li>
+</ul>
+
+
+<p>转换函数：</p>
+
+<div class="highlight"><pre><code class="objc"><span class="c1">//把UIView 转换成图片  </span>
+<span class="k">-</span><span class="p">(</span><span class="n">UIImage</span> <span class="o">*</span><span class="p">)</span><span class="nf">getImageFromView:</span><span class="p">(</span><span class="n">UIView</span> <span class="o">*</span><span class="p">)</span><span class="nv">view</span><span class="p">{</span>  
+         <span class="n">UIGraphicsBeginImageContext</span><span class="p">(</span><span class="n">view</span><span class="p">.</span><span class="n">bounds</span><span class="p">.</span><span class="n">size</span><span class="p">);</span>  
+         <span class="p">[</span><span class="n">view</span><span class="p">.</span><span class="n">layer</span> <span class="n">renderInContext</span><span class="o">:</span><span class="n">UIGraphicsGetCurrentContext</span><span class="p">()];</span>  
+         <span class="n">UIImage</span> <span class="o">*</span><span class="n">image</span> <span class="o">=</span> <span class="n">UIGraphicsGetImageFromCurrentImageContext</span><span class="p">();</span>  
+         <span class="n">UIGraphicsEndImageContext</span><span class="p">();</span>  
+         <span class="k">return</span> <span class="n">image</span><span class="p">;</span>  
+<span class="p">}</span>
+</code></pre></div>
+
+
+<p>将UIImage保存为文件（jpg和png格式）代码：</p>
+
+<div class="highlight"><pre><code class="objc"><span class="c1">//把UIView 转换成图片  </span>
+<span class="c1">// Create paths to output images</span>
+<span class="n">NSString</span>  <span class="o">*</span><span class="n">pngPath</span> <span class="o">=</span> <span class="p">[</span><span class="n">NSHomeDirectory</span><span class="p">()</span> <span class="n">stringByAppendingPathComponent</span><span class="o">:</span><span class="s">@&quot;Documents/Test.png&quot;</span><span class="p">];</span>
+<span class="n">NSString</span>  <span class="o">*</span><span class="n">jpgPath</span> <span class="o">=</span> <span class="p">[</span><span class="n">NSHomeDirectory</span><span class="p">()</span> <span class="n">stringByAppendingPathComponent</span><span class="o">:</span><span class="s">@&quot;Documents/Test.jpg&quot;</span><span class="p">];</span>
+
+<span class="c1">// Write a UIImage to JPEG with minimum compression (best quality)</span>
+<span class="c1">// The value &#39;image&#39; must be a UIImage object</span>
+<span class="c1">// The value &#39;1.0&#39; represents image compression quality as value from 0.0 to 1.0</span>
+
+<span class="p">[</span><span class="n">UIImageJPEGRepresentation</span><span class="p">(</span><span class="n">image</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">)</span> <span class="n">writeToFile</span><span class="o">:</span><span class="n">jpgPath</span> <span class="n">atomically</span><span class="o">:</span><span class="nb">YES</span><span class="p">];</span>
+
+<span class="c1">// Write image to PNG</span>
+<span class="p">[</span><span class="n">UIImagePNGRepresentation</span><span class="p">(</span><span class="n">image</span><span class="p">)</span> <span class="n">writeToFile</span><span class="o">:</span><span class="n">pngPath</span> <span class="n">atomically</span><span class="o">:</span><span class="nb">YES</span><span class="p">];</span>
+</code></pre></div>
+
+
+
+]]></content:encoded>
+    </item>
+    
+  </channel>
+</rss>

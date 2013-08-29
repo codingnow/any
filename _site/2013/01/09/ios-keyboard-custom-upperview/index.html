@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en-us">
+  <head>
+    <meta http-equiv="content-type" content="text/html; charset=utf-8" />
+    <meta name="author" content="webfrogs" />
+    <title>IOS开发之自定义系统弹出键盘上方的view | webfrogs</title>
+    <link rel="shortcut icon" href="/favicon.ico">
+    <link href="/feed/" rel="alternate" title="webfrogs" type="application/atom+xml" />
+    <link rel="stylesheet" href="/media/css/style.css">
+    <link rel="stylesheet" href="/media/css/highlight.css">
+    <script type="text/javascript" src="/media/js/jquery-1.7.1.min.js"></script>
+  </head>
+  <script type="text/javascript">
+    function setTimeSpan(){
+    	var date = new Date();
+    	timeSpan.innerText=date.format('yyyy-MM-dd hh:mm:ss');
+    }
+    
+    Date.prototype.format = function(format)
+		{
+    var o =
+    	{
+    	    "M+" : this.getMonth()+1, //month
+    	    "d+" : this.getDate(),    //day
+    	    "h+" : this.getHours(),   //hour
+    	    "m+" : this.getMinutes(), //minute
+    	    "s+" : this.getSeconds(), //second
+    	    "q+" : Math.floor((this.getMonth()+3)/3),  //quarter
+    	    "S" : this.getMilliseconds() //millisecond
+    	}
+    	if(/(y+)/.test(format))
+    	format=format.replace(RegExp.$1,(this.getFullYear()+"").substr(4 - RegExp.$1.length));
+    	for(var k in o)
+    	if(new RegExp("("+ k +")").test(format))
+    	format = format.replace(RegExp.$1,RegExp.$1.length==1 ? o[k] : ("00"+ o[k]).substr((""+ o[k]).length));
+    	return format;
+		}
+  </script>
+  <body onLoad="setInterval(setTimeSpan,1000);">
+    <div id="container">
+      <div id="main" role="main">
+        <header>
+        <h1>IOS开发之自定义系统弹出键盘上方的view</h1>
+        </header>
+        <nav>
+        <span><a title="home page" class="" href="/">Home</a></span>
+        <span><a title="about" class="" href="/about/">About</a></span>
+        <span><a title="guestbook" class="" href="/guestbook/">Guestbook</a></span>
+        <span><a title="categories" class="" href="/categories/">Categories</a></span>
+        <span><a title="tags" class="" href="/tags/">Tags</a></span>
+        <span><a title="links" class="" href="/links/">Links</a></span>
+        <span><a title="subscribe by RSS" class="" href="/feed/">Subscribe</a></span>
+        </nav>
+        <article class="content">
+        <section class="post">
+<p>这篇文章解决的一个开发中的实际问题就是：当弹出键盘时，自定义键盘上方的view。目前就我的经验来看，有两种解决方法。一个就是利用UITextField或者UITextView的inputAccessoryView属性，另一种，就是监听键盘弹出的notification来自己解决相关视图的位置问题。</p>
+
+<p>第一种解决方法相对比较简单，第二种的方法中有一个难题就是当键盘的输入方式，也就是中英文切换时，键盘的高度是会发生变化的。需要动态来调整相关视图的位置。下面开始详细介绍解决方法。</p>
+
+<h3>设定inputAccessoryView属性</h3>
+
+<hr />
+
+<p>UITextField或者UITextView有一个inputAccessoryView的属性，其类型是UIView。使用中，可以自定义一个view，并将这个view传递给inputAccessoryView的属性即可。这种实现方式相对简单，可以满足很多情况的需求了。下面给出一些示例代码。</p>
+
+<div class="highlight"><pre><code class="objc"><span class="c1">// 新建一个UITextField，位置及背景颜色随意写的。</span>
+<span class="n">UITextField</span> <span class="o">*</span><span class="n">textField</span> <span class="o">=</span> <span class="p">[[</span><span class="n">UITextField</span> <span class="n">alloc</span><span class="p">]</span> <span class="n">initWithFrame</span><span class="o">:</span><span class="n">CGRectMake</span><span class="p">(</span><span class="mi">50</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">200</span><span class="p">,</span> <span class="mi">20</span><span class="p">)];</span>
+<span class="n">textField</span><span class="p">.</span><span class="n">backgroundColor</span> <span class="o">=</span> <span class="p">[</span><span class="n">UIColor</span> <span class="n">grayColor</span><span class="p">];</span>
+<span class="p">[</span><span class="n">self</span><span class="p">.</span><span class="n">view</span> <span class="n">addSubview</span><span class="o">:</span><span class="n">textField</span><span class="p">];</span>
+    
+<span class="c1">// 自定义的view</span>
+<span class="n">UIView</span> <span class="o">*</span><span class="n">customView</span> <span class="o">=</span> <span class="p">[[</span><span class="n">UIView</span> <span class="n">alloc</span><span class="p">]</span> <span class="n">initWithFrame</span><span class="o">:</span><span class="n">CGRectMake</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">320</span><span class="p">,</span> <span class="mi">70</span><span class="p">)];</span>
+<span class="n">customView</span><span class="p">.</span><span class="n">backgroundColor</span> <span class="o">=</span> <span class="p">[</span><span class="n">UIColor</span> <span class="n">lightGrayColor</span><span class="p">];</span>
+<span class="n">textField</span><span class="p">.</span><span class="n">inputAccessoryView</span> <span class="o">=</span> <span class="n">customView</span><span class="p">;</span>
+    
+<span class="c1">// 往自定义view中添加各种UI控件(以UIButton为例)</span>
+<span class="n">UIButton</span> <span class="o">*</span><span class="n">btn</span> <span class="o">=</span> <span class="p">[[</span><span class="n">UIButton</span> <span class="n">alloc</span><span class="p">]</span> <span class="n">initWithFrame</span><span class="o">:</span><span class="n">CGRectMake</span><span class="p">(</span><span class="mi">100</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">60</span><span class="p">,</span> <span class="mi">20</span><span class="p">)];</span>
+<span class="n">btn</span><span class="p">.</span><span class="n">backgroundColor</span> <span class="o">=</span> <span class="p">[</span><span class="n">UIColor</span> <span class="n">greenColor</span><span class="p">];</span>
+<span class="p">[</span><span class="n">btn</span> <span class="n">addTarget</span><span class="o">:</span><span class="n">self</span> <span class="n">action</span><span class="o">:</span><span class="k">@selector</span><span class="p">(</span><span class="n">btnClicked</span><span class="p">)</span> <span class="n">forControlEvents</span><span class="o">:</span><span class="n">UIControlEventTouchUpInside</span><span class="p">];</span>
+<span class="p">[</span><span class="n">customView</span> <span class="n">addSubview</span><span class="o">:</span><span class="n">btn</span><span class="p">];</span>
+</code></pre></div>
+
+
+<p>上面代码很简单，一看就明白了。这里的键盘时通过UITextField的becomeFirstResponder后弹出的。而我在开发中就碰到了一种情况，就是需要通过点击一个按钮来弹出键盘，同时键盘上方的自定义视图中需要包含一个UITextView。这时，这种情况就不适用了。需要用到第二种方法。</p>
+
+<h3>监听键盘事件动态改变自定义view位置</h3>
+
+<p>这种方法的思路就是首先自己写一个view，然后监听键盘的事件，得到键盘的位置后调整自己写的view的位置，保证这个view的下边界与键盘的上边界相接。在自定义view中包含一个UITextField或者UITextView。通过代码调用其becomeFirstResponder方法来弹出键盘。</p>
+
+<p>下面写一些关键代码，其中自定义的view名为_mainView，全局变量。</p>
+
+<p>监听键盘事件代码:</p>
+
+<div class="highlight"><pre><code class="objc"><span class="p">[[</span><span class="n">NSNotificationCenter</span> <span class="n">defaultCenter</span><span class="p">]</span> <span class="n">addObserver</span><span class="o">:</span><span class="n">self</span> <span class="n">selector</span><span class="o">:</span><span class="k">@selector</span><span class="p">(</span><span class="n">changeContentViewPoint</span><span class="o">:</span><span class="p">)</span> <span class="n">name</span><span class="o">:</span><span class="n">UIKeyboardWillShowNotification</span> <span class="n">object</span><span class="o">:</span><span class="nb">nil</span><span class="p">];</span>
+</code></pre></div>
+
+
+<p>相关的函数代码:</p>
+
+<div class="highlight"><pre><code class="objc"><span class="c1">// 根据键盘状态，调整_mainView的位置</span>
+<span class="k">-</span> <span class="p">(</span><span class="kt">void</span><span class="p">)</span> <span class="nf">changeContentViewPoint:</span><span class="p">(</span><span class="n">NSNotification</span> <span class="o">*</span><span class="p">)</span><span class="nv">notification</span><span class="p">{</span>
+    <span class="n">NSDictionary</span> <span class="o">*</span><span class="n">userInfo</span> <span class="o">=</span> <span class="p">[</span><span class="n">notification</span> <span class="n">userInfo</span><span class="p">];</span>
+    <span class="n">NSValue</span> <span class="o">*</span><span class="n">value</span> <span class="o">=</span> <span class="p">[</span><span class="n">userInfo</span> <span class="n">objectForKey</span><span class="o">:</span><span class="n">UIKeyboardFrameEndUserInfoKey</span><span class="p">];</span>
+    <span class="n">CGFloat</span> <span class="n">keyBoardEndY</span> <span class="o">=</span> <span class="n">value</span><span class="p">.</span><span class="n">CGRectValue</span><span class="p">.</span><span class="n">origin</span><span class="p">.</span><span class="n">y</span><span class="p">;</span>  <span class="c1">// 得到键盘弹出后的键盘视图所在y坐标</span>
+    
+    <span class="n">NSNumber</span> <span class="o">*</span><span class="n">duration</span> <span class="o">=</span> <span class="p">[</span><span class="n">userInfo</span> <span class="n">objectForKey</span><span class="o">:</span><span class="n">UIKeyboardAnimationDurationUserInfoKey</span><span class="p">];</span>
+    <span class="n">NSNumber</span> <span class="o">*</span><span class="n">curve</span> <span class="o">=</span> <span class="p">[</span><span class="n">userInfo</span> <span class="n">objectForKey</span><span class="o">:</span><span class="n">UIKeyboardAnimationCurveUserInfoKey</span><span class="p">];</span>
+    
+    <span class="c1">// 添加移动动画，使视图跟随键盘移动</span>
+    <span class="p">[</span><span class="n">UIView</span> <span class="n">animateWithDuration</span><span class="o">:</span><span class="n">duration</span><span class="p">.</span><span class="n">doubleValue</span> <span class="n">animations</span><span class="o">:^</span><span class="p">{</span>
+        <span class="p">[</span><span class="n">UIView</span> <span class="n">setAnimationBeginsFromCurrentState</span><span class="o">:</span><span class="nb">YES</span><span class="p">];</span>
+        <span class="p">[</span><span class="n">UIView</span> <span class="n">setAnimationCurve</span><span class="o">:</span><span class="p">[</span><span class="n">curve</span> <span class="n">intValue</span><span class="p">]];</span>
+        
+        <span class="n">_mainView</span><span class="p">.</span><span class="n">center</span> <span class="o">=</span> <span class="n">CGPointMake</span><span class="p">(</span><span class="n">_mainView</span><span class="p">.</span><span class="n">center</span><span class="p">.</span><span class="n">x</span><span class="p">,</span> <span class="n">keyBoardEndY</span> <span class="o">-</span> <span class="n">STATUS_BAR_HEIGHT</span> <span class="o">-</span> <span class="n">_mainView</span><span class="p">.</span><span class="n">bounds</span><span class="p">.</span><span class="n">size</span><span class="p">.</span><span class="n">height</span><span class="o">/</span><span class="mf">2.0</span><span class="p">);</span>   <span class="c1">// keyBoardEndY的坐标包括了状态栏的高度，要减去</span>
+        
+    <span class="p">}];</span>
+    
+    
+    
+<span class="p">}</span>
+</code></pre></div>
+
+
+<p>其中添加了一个动画，使得过渡效果好一点。
+<em>mainView中即可添加自定义的UI控件。注意，这个</em>mainView中控件要从最下面开始布局，因为上述代码是以下方为准的。</p>
+
+</section>
+<section class="meta">
+
+<br/>
+<br/>
+<span>
+	<a  href="http://webfrogs.github.com/2012/12/31/the-end-of-2012/" class="pageNav"  >Previous</a>
+	&nbsp;&nbsp;&nbsp;
+	<a  href="http://webfrogs.github.com/2013/01/14/ios-problem-solved/" class="pageNav"  >Next</a>
+</span>
+<hr>
+<span class="author">
+  <a href="http://webfrogs.github.com">webfrogs</a>
+</span>
+<span class="time">
+  /
+  <time datetime="2013-01-09">2013-01-09</time>
+</span>
+<br />
+<span class="license">
+  Published under <a rel="license" href="http://creativecommons.org/licenses/by-nc-sa/3.0/">(CC) BY-NC-SA</a>
+</span>
+
+<span class="categories">
+  in categories
+  
+  <a href="/categories/#ios" title="ios">ios</a>&nbsp;
+  
+</span>
+
+
+<span class="tags">
+  tagged with 
+  
+  <a href="/tags/#iOS" title="iOS">iOS</a>&nbsp;
+  
+</span>
+
+</section>
+<!-- Duoshuo Comment BEGIN -->
+	<div class="ds-thread"></div>
+	<script type="text/javascript">
+	var duoshuoQuery = {short_name:"webfrogs"};
+	(function() {
+		var ds = document.createElement('script');
+		ds.type = 'text/javascript';ds.async = true;
+		ds.src = 'http://static.duoshuo.com/embed.js';
+		ds.charset = 'UTF-8';
+		(document.getElementsByTagName('head')[0] 
+		|| document.getElementsByTagName('body')[0]).appendChild(ds);
+	})();
+	</script>
+<!-- Duoshuo Comment END -->
+<!--
+<script type="text/javascript">
+$(function(){
+  $(document).keydown(function(e) {
+    var url = false;
+        if (e.which == 37 || e.which == 74) {  // Left arrow and J
+            
+        url = 'http://webfrogs.github.com/2012/12/31/the-end-of-2012/';
+        
+        }
+        else if (e.which == 39 || e.which == 75) {  // Right arrow and K
+            
+        url = 'http://webfrogs.github.com/2013/01/14/ios-problem-solved/';
+        
+        }
+        if (url) {
+            window.location = url;
+        }
+  });
+})
+</script>
+-->
+
+
+        </article>
+      </div>
+
+    <footer>
+        <p><small>Powered by <a href="https://github.com/mojombo/jekyll">Jekyll</a> & <a href="http://pages.github.com">GitHub</a> | Copyright 2012 - 2013 by <a href="/about/">webfrogs</a> | <span class="label label-info" id="timeSpan"></span></small></p>
+    </footer>
+
+    </div>
+
+    <script type="text/javascript">
+      var _gaq = _gaq || [];
+      _gaq.push(['_setAccount', 'UA-34960818-1']);
+      _gaq.push(['_trackPageview']);
+      (function() {
+        var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+        ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+        var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+      })();
+    </script>
+
+    <!-- Baidu Button BEGIN -->
+		<script type="text/javascript" id="bdshare_js" data="type=slide&amp;img=4&amp;pos=right&amp;uid=541841" ></script>
+		<script type="text/javascript" id="bdshell_js"></script>
+		<script type="text/javascript">
+		var bds_config={"bdTop":170};
+		document.getElementById("bdshell_js").src = "http://bdimg.share.baidu.com/static/js/shell_v2.js?cdnversion=" + Math.ceil(new Date()/3600000);
+		</script>
+		<!-- Baidu Button END -->
+  </body>
+</html>

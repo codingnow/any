@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en-us">
+  <head>
+    <meta http-equiv="content-type" content="text/html; charset=utf-8" />
+    <meta name="author" content="webfrogs" />
+    <title>shell脚本实现ipa一键安装(itms-services协议) | webfrogs</title>
+    <link rel="shortcut icon" href="/favicon.ico">
+    <link href="/feed/" rel="alternate" title="webfrogs" type="application/atom+xml" />
+    <link rel="stylesheet" href="/media/css/style.css">
+    <link rel="stylesheet" href="/media/css/highlight.css">
+    <script type="text/javascript" src="/media/js/jquery-1.7.1.min.js"></script>
+  </head>
+  <script type="text/javascript">
+    function setTimeSpan(){
+    	var date = new Date();
+    	timeSpan.innerText=date.format('yyyy-MM-dd hh:mm:ss');
+    }
+    
+    Date.prototype.format = function(format)
+		{
+    var o =
+    	{
+    	    "M+" : this.getMonth()+1, //month
+    	    "d+" : this.getDate(),    //day
+    	    "h+" : this.getHours(),   //hour
+    	    "m+" : this.getMinutes(), //minute
+    	    "s+" : this.getSeconds(), //second
+    	    "q+" : Math.floor((this.getMonth()+3)/3),  //quarter
+    	    "S" : this.getMilliseconds() //millisecond
+    	}
+    	if(/(y+)/.test(format))
+    	format=format.replace(RegExp.$1,(this.getFullYear()+"").substr(4 - RegExp.$1.length));
+    	for(var k in o)
+    	if(new RegExp("("+ k +")").test(format))
+    	format = format.replace(RegExp.$1,RegExp.$1.length==1 ? o[k] : ("00"+ o[k]).substr((""+ o[k]).length));
+    	return format;
+		}
+  </script>
+  <body onLoad="setInterval(setTimeSpan,1000);">
+    <div id="container">
+      <div id="main" role="main">
+        <header>
+        <h1>shell脚本实现ipa一键安装(itms-services协议)</h1>
+        </header>
+        <nav>
+        <span><a title="home page" class="" href="/">Home</a></span>
+        <span><a title="about" class="" href="/about/">About</a></span>
+        <span><a title="guestbook" class="" href="/guestbook/">Guestbook</a></span>
+        <span><a title="categories" class="" href="/categories/">Categories</a></span>
+        <span><a title="tags" class="" href="/tags/">Tags</a></span>
+        <span><a title="links" class="" href="/links/">Links</a></span>
+        <span><a title="subscribe by RSS" class="" href="/feed/">Subscribe</a></span>
+        </nav>
+        <article class="content">
+        <section class="post">
+<h1>简介</h1>
+
+<hr />
+
+<p>通过itms-services协议，可以通过safari浏览器直接在IOS设备上安装应用程序。具体效果可以看图。</p>
+
+<p><img src="/assets/images/QQ20120927-1.jpg" alt="示例" /><img src="/assets/images/QQ20120927-2.jpg" alt="示例" /><img src="/assets/images/QQ20120927-3.jpg" alt="示例" /></p>
+
+<p>利用这种方式，只要在内网布置一个服务器，测试人员只需要通过测试设备的safari浏览器访问特定的url既可以实现安装，然后测试了。（PS：越狱设备也可以）</p>
+
+<p>itms-services协议需要一个plist配置文件。如果要实现上面图示的功能，需要的文件有：一个ipa文件，一个plist文件，一个html文件和一个图片文件。其中，最主要的，就是plist文件。通过shell脚本，我们可以让其自动为我们生成plist文件和html文件，并且在xcode工程中的ipa文件和程序图标文件复制一份，放到一起。下面，我们来实现这个名为“ipa-publish”的shell脚本。</p>
+
+<p><strong>注意：</strong>该脚本需要与“ipa-build”脚本配合使用。“ipa-build”脚本下载：<a href="/assets/download/ipa-build">点击这里</a>，相关文章<a href="http://webfrogs.github.com/2012/09/19/buildipa/">《xcode自动打ipa包脚本》</a></p>
+
+<h1>实现</h1>
+
+<hr />
+
+<p>“ipa-publish”脚本内容：</p>
+
+<pre><code>#!/bin/bash
+
+#--------------------------------------------
+# 功能：创建符合itms-services协议的发布文件
+# 作者：ccf
+# E-mail:ccf.developer@gmail.com
+# 创建日期：2012/09/24
+#--------------------------------------------
+# 修改日期：2012/09/27
+# 修改人：ccf
+# 修改内容：去掉打包的部分脚本，只保留生成协议文件部分，以后此脚本依赖ipa-build脚本
+#--------------------------------------------
+
+
+#须配置内容  start
+
+#发布应用的url地址
+pulish_url="http://webfrogs.github.com/urls/"
+
+#可配置内容  end
+
+#参数判断
+if [ $# != 2 ] &amp;&amp; [ $# != 1 ];then
+    echo "Number of params error! Need one or two params!"
+    echo "1.root path of project(necessary) 2.name used to display when installing"
+    exit
+elif [ ! -d $1 ];then
+    echo "The param must be a dictionary."
+    exit    
+
+fi
+
+
+#工程绝对路径
+cd $1
+project_path=$(pwd)
+
+#判断所输入路径是否是xcode工程的根路径
+ls | grep .xcodeproj &gt; /dev/null
+rtnValue=$?
+if [ $rtnValue != 0 ];then
+    echo "Error!! The param must be the root path of a xcode project."
+    exit
+fi
+
+#判断是否执行过ipa-build脚本
+ls ./build/ipa-build/*.ipa &amp;&gt;/dev/null
+rtnValue=$?
+if [ $rtnValue != 0 ];then
+    echo "Error!! No ipa files exists.Please run the \"ipa-build\" shell script first"
+    exit
+fi
+
+
+#IPA名称
+if [ $# = 2 ];then
+ipa_name=$2
+fi
+
+#build文件夹路径
+build_path=${project_path}/build
+
+#工程配置文件路径
+project_name=$(ls | grep xcodeproj | awk -F.xcodeproj '{print $1}')
+project_infoplist_path=${project_path}/${project_name}/${project_name}-Info.plist
+#取build值
+bundleVersion=$(/usr/libexec/PlistBuddy -c "print CFBundleVersion" ${project_infoplist_path})
+#取bundle Identifier前缀
+bundlePrefix=$(/usr/libexec/PlistBuddy -c "print CFBundleIdentifier" `find . -name "*-Info.plist"` | awk -F$ '{print $1}')
+
+#生成发布文件
+
+#拷贝ipa
+cd $build_path
+target_name=$(basename ./Release-iphoneos/*.app | awk -F. '{print $1}')
+if [ $# = 1 ];then
+ipa_name="${target_name}"
+fi
+
+if [ -d ./$target_name ];then
+    rm -rf $target_name
+fi
+mkdir $target_name
+cp ./ipa-build/*.ipa ./$target_name/${target_name}.ipa
+cp ../Icon@2x.png ./$target_name/${target_name}_logo.png
+cd $target_name
+#生成install.html文件
+cat &lt;&lt; EOF &gt; index.html
+&lt;!DOCTYPE HTML&gt;
+&lt;html&gt;
+  &lt;head&gt;
+    &lt;meta http-equiv="Content-Type" content="text/html; charset=UTF-8" /&gt;
+    &lt;title&gt;安装此软件&lt;/title&gt;
+  &lt;/head&gt;
+  &lt;body&gt;
+    &lt;br&gt;
+    &lt;br&gt;
+    &lt;br&gt;
+    &lt;br&gt;
+    &lt;p align=center&gt;
+        &lt;font size="8"&gt;
+            &lt;a href="itms-services://?action=download-manifest&amp;url=${pulish_url}${target_name}.plist"&gt;点击这里安装&lt;/a&gt;
+        &lt;/font&gt;
+    &lt;/p&gt;
+
+   &lt;/div&gt;
+  &lt;/body&gt;
+&lt;/html&gt;
+EOF
+#生成plist文件
+cat &lt;&lt; EOF &gt; ${target_name}.plist
+&lt;?xml version="1.0" encoding="UTF-8"?&gt;
+&lt;!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"&gt;
+&lt;plist version="1.0"&gt;
+&lt;dict&gt;
+   &lt;key&gt;items&lt;/key&gt;
+   &lt;array&gt;
+       &lt;dict&gt;
+           &lt;key&gt;assets&lt;/key&gt;
+           &lt;array&gt;
+              &lt;dict&gt;
+                  &lt;key&gt;kind&lt;/key&gt;
+                  &lt;string&gt;software-package&lt;/string&gt;
+                   &lt;key&gt;url&lt;/key&gt;
+                  &lt;string&gt;${pulish_url}/${target_name}/${target_name}.ipa&lt;/string&gt;
+              &lt;/dict&gt;
+               &lt;dict&gt;
+                 &lt;key&gt;kind&lt;/key&gt;
+                 &lt;string&gt;display-image&lt;/string&gt;
+                 &lt;key&gt;needs-shine&lt;/key&gt;
+                &lt;true/&gt;
+                &lt;key&gt;url&lt;/key&gt;
+                &lt;string&gt;${pulish_url}/${target_name}/${target_name}_logo.png&lt;/string&gt;
+             &lt;/dict&gt;
+           &lt;dict&gt;
+                  &lt;key&gt;kind&lt;/key&gt;
+                  &lt;string&gt;full-size-image&lt;/string&gt;
+                  &lt;key&gt;needs-shine&lt;/key&gt;
+                  &lt;true/&gt;
+                   &lt;key&gt;url&lt;/key&gt;
+                   &lt;string&gt;${pulish_url}/${target_name}/${target_name}_logo.png&lt;/string&gt;
+               &lt;/dict&gt;
+           &lt;/array&gt;&lt;key&gt;metadata&lt;/key&gt;
+           &lt;dict&gt;
+               &lt;key&gt;bundle-identifier&lt;/key&gt;
+               &lt;string&gt;${bundlePrefix}${target_name}&lt;/string&gt;
+               &lt;key&gt;bundle-version&lt;/key&gt;
+              &lt;string&gt;${bundleVersion}&lt;/string&gt;
+               &lt;key&gt;kind&lt;/key&gt;
+               &lt;string&gt;software&lt;/string&gt;
+               &lt;key&gt;subtitle&lt;/key&gt;
+               &lt;string&gt;${ipa_name}&lt;/string&gt;
+               &lt;key&gt;title&lt;/key&gt;
+               &lt;string&gt;${ipa_name}&lt;/string&gt;
+           &lt;/dict&gt;
+       &lt;/dict&gt;
+   &lt;/array&gt;
+&lt;/dict&gt;
+&lt;/plist&gt;
+
+EOF
+</code></pre>
+
+<p>脚本说明：pulish_url="http://webfrogs.github.com/urls/" 这句话是需要配置的，对应的就是要将文件放到的http服务的url。这里是一定要配置正确的。</p>
+
+<p>将shell脚本保存，命名为“ipa-publish”，然后为其添加可执行权限，命令如下：</p>
+
+<pre><code>chmod +x ipa-publish
+</code></pre>
+
+<p>这里提供shell脚本下载，下载完后，只需要为其增加可执行权限即可。<a href="/assets/download/ipa-publish">下载点这里</a></p>
+
+<h1>使用</h1>
+
+<hr />
+
+<p>该脚本依赖“ipa-build”脚本所产生的内容，所以在执行该脚本之前，首先需要执行“ipa-build”脚本。执行该脚本有两个参数：第一个为xcode工程根路径。第二个是在安装时的显示程序的名称，即第三幅图中下载安装时所显示的名字，第二个参数可选，默认的是xcode工程的target的名字。</p>
+
+<p>比如：“ipa-publish”位于~/shell 路径，xcode工程根路径：~/iphone/HuaRongDao，安装时显示的名称为“华容道”,则命令如下：</p>
+
+<pre><code>~/shell/ipa-publish ~/iphone/HuaRongDao 华容道
+</code></pre>
+
+<p>命令执行完后，在当前工程的build文件夹下，会有一个以target名字命名的文件夹，里面就是整个发布所需要的文件。</p>
+
+<p>把这个文件夹直接上传到http服务上。之后就可以通过发布的url加上 /文件夹名 来访问了。</p>
+
+<p>这里提供一个测试地址: <a href="http://webfrogs.github.com/urls/HuaRongDao/">http://webfrogs.github.com/urls/HuaRongDao/</a> 直接通过IOS设备的safari浏览器访问该url，然后点击其中的链接，就可以出现开始时图示的信息了。</p>
+
+<h1>总结</h1>
+
+<hr />
+
+<p>这篇文章写的比较乱，其实这么做的真正意义是，可以通过脚本，来实现一些CI的功能。
+之后还可以用脚本来写自动上传的功能，完成xcode工程自动打包，生成文件，以及上传自动化。减轻我们开发时打包的工作量，同时也方便了测试人员安装测试。脚本还有很多可以优化的地方，比如，打包脚本的增加根据渠道来打不同包的功能。</p>
+
+</section>
+<section class="meta">
+
+<br/>
+<br/>
+<span>
+	<a  href="http://webfrogs.github.com/2012/09/19/buildipa/" class="pageNav"  >Previous</a>
+	&nbsp;&nbsp;&nbsp;
+	<a  href="http://webfrogs.github.com/2012/11/02/webviewandjs/" class="pageNav"  >Next</a>
+</span>
+<hr>
+<span class="author">
+  <a href="http://webfrogs.github.com">webfrogs</a>
+</span>
+<span class="time">
+  /
+  <time datetime="2012-09-27">2012-09-27</time>
+</span>
+<br />
+<span class="license">
+  Published under <a rel="license" href="http://creativecommons.org/licenses/by-nc-sa/3.0/">(CC) BY-NC-SA</a>
+</span>
+
+<span class="categories">
+  in categories
+  
+  <a href="/categories/#ios" title="ios">ios</a>&nbsp;
+  
+</span>
+
+
+<span class="tags">
+  tagged with 
+  
+  <a href="/tags/#iOS" title="iOS">iOS</a>&nbsp;
+  
+  <a href="/tags/#xcode" title="xcode">xcode</a>&nbsp;
+  
+</span>
+
+</section>
+<!-- Duoshuo Comment BEGIN -->
+	<div class="ds-thread"></div>
+	<script type="text/javascript">
+	var duoshuoQuery = {short_name:"webfrogs"};
+	(function() {
+		var ds = document.createElement('script');
+		ds.type = 'text/javascript';ds.async = true;
+		ds.src = 'http://static.duoshuo.com/embed.js';
+		ds.charset = 'UTF-8';
+		(document.getElementsByTagName('head')[0] 
+		|| document.getElementsByTagName('body')[0]).appendChild(ds);
+	})();
+	</script>
+<!-- Duoshuo Comment END -->
+<!--
+<script type="text/javascript">
+$(function(){
+  $(document).keydown(function(e) {
+    var url = false;
+        if (e.which == 37 || e.which == 74) {  // Left arrow and J
+            
+        url = 'http://webfrogs.github.com/2012/09/19/buildipa/';
+        
+        }
+        else if (e.which == 39 || e.which == 75) {  // Right arrow and K
+            
+        url = 'http://webfrogs.github.com/2012/11/02/webviewandjs/';
+        
+        }
+        if (url) {
+            window.location = url;
+        }
+  });
+})
+</script>
+-->
+
+
+        </article>
+      </div>
+
+    <footer>
+        <p><small>Powered by <a href="https://github.com/mojombo/jekyll">Jekyll</a> & <a href="http://pages.github.com">GitHub</a> | Copyright 2012 - 2013 by <a href="/about/">webfrogs</a> | <span class="label label-info" id="timeSpan"></span></small></p>
+    </footer>
+
+    </div>
+
+    <script type="text/javascript">
+      var _gaq = _gaq || [];
+      _gaq.push(['_setAccount', 'UA-34960818-1']);
+      _gaq.push(['_trackPageview']);
+      (function() {
+        var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+        ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+        var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+      })();
+    </script>
+
+    <!-- Baidu Button BEGIN -->
+		<script type="text/javascript" id="bdshare_js" data="type=slide&amp;img=4&amp;pos=right&amp;uid=541841" ></script>
+		<script type="text/javascript" id="bdshell_js"></script>
+		<script type="text/javascript">
+		var bds_config={"bdTop":170};
+		document.getElementById("bdshell_js").src = "http://bdimg.share.baidu.com/static/js/shell_v2.js?cdnversion=" + Math.ceil(new Date()/3600000);
+		</script>
+		<!-- Baidu Button END -->
+  </body>
+</html>

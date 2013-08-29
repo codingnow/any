@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en-us">
+  <head>
+    <meta http-equiv="content-type" content="text/html; charset=utf-8" />
+    <meta name="author" content="webfrogs" />
+    <title>Categories | webfrogs</title>
+    <link rel="shortcut icon" href="/favicon.ico">
+    <link href="/feed/" rel="alternate" title="webfrogs" type="application/atom+xml" />
+    <link rel="stylesheet" href="/media/css/style.css">
+    <link rel="stylesheet" href="/media/css/highlight.css">
+    <script type="text/javascript" src="/media/js/jquery-1.7.1.min.js"></script>
+  </head>
+  <script type="text/javascript">
+    function setTimeSpan(){
+    	var date = new Date();
+    	timeSpan.innerText=date.format('yyyy-MM-dd hh:mm:ss');
+    }
+    
+    Date.prototype.format = function(format)
+		{
+    var o =
+    	{
+    	    "M+" : this.getMonth()+1, //month
+    	    "d+" : this.getDate(),    //day
+    	    "h+" : this.getHours(),   //hour
+    	    "m+" : this.getMinutes(), //minute
+    	    "s+" : this.getSeconds(), //second
+    	    "q+" : Math.floor((this.getMonth()+3)/3),  //quarter
+    	    "S" : this.getMilliseconds() //millisecond
+    	}
+    	if(/(y+)/.test(format))
+    	format=format.replace(RegExp.$1,(this.getFullYear()+"").substr(4 - RegExp.$1.length));
+    	for(var k in o)
+    	if(new RegExp("("+ k +")").test(format))
+    	format = format.replace(RegExp.$1,RegExp.$1.length==1 ? o[k] : ("00"+ o[k]).substr((""+ o[k]).length));
+    	return format;
+		}
+  </script>
+  <body onLoad="setInterval(setTimeSpan,1000);">
+    <div id="container">
+      <div id="main" role="main">
+        <header>
+        <h1>Categories</h1>
+        </header>
+        <nav>
+        <span><a title="home page" class="" href="/">Home</a></span>
+        <span><a title="about" class="" href="/about/">About</a></span>
+        <span><a title="guestbook" class="" href="/guestbook/">Guestbook</a></span>
+        <span><a title="categories" class="" href="/categories/">Categories</a></span>
+        <span><a title="tags" class="" href="/tags/">Tags</a></span>
+        <span><a title="links" class="" href="/links/">Links</a></span>
+        <span><a title="subscribe by RSS" class="" href="/feed/">Subscribe</a></span>
+        </nav>
+        <article class="content">
+        <section class="post">
+<div id='tag_cloud'>
+
+<a href="#objc" title="objc" rel="1">objc (1)</a>
+
+<a href="#arduino" title="arduino" rel="1">arduino (1)</a>
+
+<a href="#ios" title="ios" rel="16">ios (16)</a>
+
+<a href="#essay" title="essay" rel="3">essay (3)</a>
+
+<a href="#git" title="git" rel="1">git (1)</a>
+
+<a href="#translation" title="translation" rel="1">translation (1)</a>
+
+<a href="#jekyll" title="jekyll" rel="2">jekyll (2)</a>
+
+</div>
+
+
+
+
+<ul class="listing">
+
+  <li class="listing-seperator" id="objc">objc</li>
+
+  <li class="listing-item">
+  <time datetime="2013-07-18">2013-07-18</time>
+  <a href="http://webfrogs.github.com/2013/07/18/low-level_concurrency_apis/" title="Objc的底层并发API">Objc的底层并发API</a>
+  </li>
+
+
+  <li class="listing-seperator" id="arduino">arduino</li>
+
+  <li class="listing-item">
+  <time datetime="2012-12-28">2012-12-28</time>
+  <a href="http://webfrogs.github.com/2012/12/28/ubuntu-arduino-ide/" title="解决ubuntu下arduino IDE的Serial Port无法选择问题">解决ubuntu下arduino IDE的Serial Port无法选择问题</a>
+  </li>
+
+
+  <li class="listing-seperator" id="ios">ios</li>
+
+  <li class="listing-item">
+  <time datetime="2013-07-18">2013-07-18</time>
+  <a href="http://webfrogs.github.com/2013/07/18/low-level_concurrency_apis/" title="Objc的底层并发API">Objc的底层并发API</a>
+  </li>
+
+  <li class="listing-item">
+  <time datetime="2013-05-22">2013-05-22</time>
+  <a href="http://webfrogs.github.com/2013/05/22/ios-view-assign-corner-radius/" title="iOS开发之指定UIView的某几个角为圆角">iOS开发之指定UIView的某几个角为圆角</a>
+  </li>
+
+  <li class="listing-item">
+  <time datetime="2013-04-22">2013-04-22</time>
+  <a href="http://webfrogs.github.com/2013/04/22/build-cocoapods-project/" title="基于CocoaPods的iOS工程自动打包脚本实现">基于CocoaPods的iOS工程自动打包脚本实现</a>
+  </li>
+
+  <li class="listing-item">
+  <time datetime="2013-04-01">2013-04-01</time>
+  <a href="http://webfrogs.github.com/2013/04/01/ios-singleton/" title="iOS单例的两种实现">iOS单例的两种实现</a>
+  </li>
+
+  <li class="listing-item">
+  <time datetime="2013-03-13">2013-03-13</time>
+  <a href="http://webfrogs.github.com/2013/03/13/read-note-view/" title="《View Programming Guide for iOS》阅读笔记">《View Programming Guide for iOS》阅读笔记</a>
+  </li>
+
+  <li class="listing-item">
+  <time datetime="2013-03-11">2013-03-11</time>
+  <a href="http://webfrogs.github.com/2013/03/11/ios-animations/" title="IOS官方文档阅读之动画">IOS官方文档阅读之动画</a>
+  </li>
+
+  <li class="listing-item">
+  <time datetime="2013-02-18">2013-02-18</time>
+  <a href="http://webfrogs.github.com/2013/02/18/ios-automation/" title="IOS工程自动打包并发布脚本实现">IOS工程自动打包并发布脚本实现</a>
+  </li>
+
+  <li class="listing-item">
+  <time datetime="2013-01-30">2013-01-30</time>
+  <a href="http://webfrogs.github.com/2013/01/30/ios-custom-keyboard/" title="IOS开发之自定义键盘">IOS开发之自定义键盘</a>
+  </li>
+
+  <li class="listing-item">
+  <time datetime="2013-01-14">2013-01-14</time>
+  <a href="http://webfrogs.github.com/2013/01/14/ios-problem-solved/" title="IOS开发之细节知识点汇总">IOS开发之细节知识点汇总</a>
+  </li>
+
+  <li class="listing-item">
+  <time datetime="2013-01-09">2013-01-09</time>
+  <a href="http://webfrogs.github.com/2013/01/09/ios-keyboard-custom-upperview/" title="IOS开发之自定义系统弹出键盘上方的view">IOS开发之自定义系统弹出键盘上方的view</a>
+  </li>
+
+  <li class="listing-item">
+  <time datetime="2012-12-26">2012-12-26</time>
+  <a href="http://webfrogs.github.com/2012/12/26/iphone-use-zbar/" title="IOS开发之ZBarReaderView的使用">IOS开发之ZBarReaderView的使用</a>
+  </li>
+
+  <li class="listing-item">
+  <time datetime="2012-12-18">2012-12-18</time>
+  <a href="http://webfrogs.github.com/2012/12/18/ios-static-lib/" title="ios静态库制作中的注意事项">ios静态库制作中的注意事项</a>
+  </li>
+
+  <li class="listing-item">
+  <time datetime="2012-11-02">2012-11-02</time>
+  <a href="http://webfrogs.github.com/2012/11/02/webviewandjs/" title="IOS中UIWebView和JavaScript交互">IOS中UIWebView和JavaScript交互</a>
+  </li>
+
+  <li class="listing-item">
+  <time datetime="2012-09-27">2012-09-27</time>
+  <a href="http://webfrogs.github.com/2012/09/27/ipapublsh/" title="shell脚本实现ipa一键安装(itms-services协议)">shell脚本实现ipa一键安装(itms-services协议)</a>
+  </li>
+
+  <li class="listing-item">
+  <time datetime="2012-09-19">2012-09-19</time>
+  <a href="http://webfrogs.github.com/2012/09/19/buildipa/" title="xcode自动打ipa包脚本">xcode自动打ipa包脚本</a>
+  </li>
+
+  <li class="listing-item">
+  <time datetime="2012-09-18">2012-09-18</time>
+  <a href="http://webfrogs.github.com/2012/09/18/appledoc/" title="appledoc使用">appledoc使用</a>
+  </li>
+
+
+  <li class="listing-seperator" id="essay">essay</li>
+
+  <li class="listing-item">
+  <time datetime="2012-12-31">2012-12-31</time>
+  <a href="http://webfrogs.github.com/2012/12/31/the-end-of-2012/" title="写于2012年最后一个晚上">写于2012年最后一个晚上</a>
+  </li>
+
+  <li class="listing-item">
+  <time datetime="2012-12-22">2012-12-22</time>
+  <a href="http://webfrogs.github.com/2012/12/22/2012-year-end-wrap/" title="2012年终工作总结">2012年终工作总结</a>
+  </li>
+
+  <li class="listing-item">
+  <time datetime="2012-08-22">2012-08-22</time>
+  <a href="http://webfrogs.github.com/2012/08/22/myfirstblog/" title="第一篇博客">第一篇博客</a>
+  </li>
+
+
+  <li class="listing-seperator" id="git">git</li>
+
+  <li class="listing-item">
+  <time datetime="2013-03-20">2013-03-20</time>
+  <a href="http://webfrogs.github.com/2013/03/20/git-submodule/" title="git submodule的使用">git submodule的使用</a>
+  </li>
+
+
+  <li class="listing-seperator" id="translation">translation</li>
+
+  <li class="listing-item">
+  <time datetime="2013-07-18">2013-07-18</time>
+  <a href="http://webfrogs.github.com/2013/07/18/low-level_concurrency_apis/" title="Objc的底层并发API">Objc的底层并发API</a>
+  </li>
+
+
+  <li class="listing-seperator" id="jekyll">jekyll</li>
+
+  <li class="listing-item">
+  <time datetime="2012-12-20">2012-12-20</time>
+  <a href="http://webfrogs.github.com/2012/12/20/use-jekyll/" title="使用jekyll来写博客的一些心得">使用jekyll来写博客的一些心得</a>
+  </li>
+
+  <li class="listing-item">
+  <time datetime="2012-09-12">2012-09-12</time>
+  <a href="http://webfrogs.github.com/2012/09/12/jekllyinfo/" title="jekyll常用命令总结">jekyll常用命令总结</a>
+  </li>
+
+
+</ul>
+
+
+
+
+<script src="/media/js/jquery.tagcloud.js" type="text/javascript" charset="utf-8"></script>
+
+
+<p></p>
+
+<script language="javascript">
+$.fn.tagcloud.defaults = {
+    size: {start: 1, end: 1, unit: 'em'},
+      color: {start: '#f8e0e6', end: '#ff3333'}
+};
+
+$(function () {
+    $('#tag_cloud a').tagcloud();
+});
+</script>
+
+
+</section>
+
+
+
+        </article>
+      </div>
+
+    <footer>
+        <p><small>Powered by <a href="https://github.com/mojombo/jekyll">Jekyll</a> & <a href="http://pages.github.com">GitHub</a> | Copyright 2012 - 2013 by <a href="/about/">webfrogs</a> | <span class="label label-info" id="timeSpan"></span></small></p>
+    </footer>
+
+    </div>
+
+    <script type="text/javascript">
+      var _gaq = _gaq || [];
+      _gaq.push(['_setAccount', 'UA-34960818-1']);
+      _gaq.push(['_trackPageview']);
+      (function() {
+        var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+        ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+        var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+      })();
+    </script>
+
+    <!-- Baidu Button BEGIN -->
+		<script type="text/javascript" id="bdshare_js" data="type=slide&amp;img=4&amp;pos=right&amp;uid=541841" ></script>
+		<script type="text/javascript" id="bdshell_js"></script>
+		<script type="text/javascript">
+		var bds_config={"bdTop":170};
+		document.getElementById("bdshell_js").src = "http://bdimg.share.baidu.com/static/js/shell_v2.js?cdnversion=" + Math.ceil(new Date()/3600000);
+		</script>
+		<!-- Baidu Button END -->
+  </body>
+</html>

@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en-us">
+  <head>
+    <meta http-equiv="content-type" content="text/html; charset=utf-8" />
+    <meta name="author" content="webfrogs" />
+    <title>IOS开发之ZBarReaderView的使用 | webfrogs</title>
+    <link rel="shortcut icon" href="/favicon.ico">
+    <link href="/feed/" rel="alternate" title="webfrogs" type="application/atom+xml" />
+    <link rel="stylesheet" href="/media/css/style.css">
+    <link rel="stylesheet" href="/media/css/highlight.css">
+    <script type="text/javascript" src="/media/js/jquery-1.7.1.min.js"></script>
+  </head>
+  <script type="text/javascript">
+    function setTimeSpan(){
+    	var date = new Date();
+    	timeSpan.innerText=date.format('yyyy-MM-dd hh:mm:ss');
+    }
+    
+    Date.prototype.format = function(format)
+		{
+    var o =
+    	{
+    	    "M+" : this.getMonth()+1, //month
+    	    "d+" : this.getDate(),    //day
+    	    "h+" : this.getHours(),   //hour
+    	    "m+" : this.getMinutes(), //minute
+    	    "s+" : this.getSeconds(), //second
+    	    "q+" : Math.floor((this.getMonth()+3)/3),  //quarter
+    	    "S" : this.getMilliseconds() //millisecond
+    	}
+    	if(/(y+)/.test(format))
+    	format=format.replace(RegExp.$1,(this.getFullYear()+"").substr(4 - RegExp.$1.length));
+    	for(var k in o)
+    	if(new RegExp("("+ k +")").test(format))
+    	format = format.replace(RegExp.$1,RegExp.$1.length==1 ? o[k] : ("00"+ o[k]).substr((""+ o[k]).length));
+    	return format;
+		}
+  </script>
+  <body onLoad="setInterval(setTimeSpan,1000);">
+    <div id="container">
+      <div id="main" role="main">
+        <header>
+        <h1>IOS开发之ZBarReaderView的使用</h1>
+        </header>
+        <nav>
+        <span><a title="home page" class="" href="/">Home</a></span>
+        <span><a title="about" class="" href="/about/">About</a></span>
+        <span><a title="guestbook" class="" href="/guestbook/">Guestbook</a></span>
+        <span><a title="categories" class="" href="/categories/">Categories</a></span>
+        <span><a title="tags" class="" href="/tags/">Tags</a></span>
+        <span><a title="links" class="" href="/links/">Links</a></span>
+        <span><a title="subscribe by RSS" class="" href="/feed/">Subscribe</a></span>
+        </nav>
+        <article class="content">
+        <section class="post">
+<p>当开发IOS程序中需要用到二维码识别功能的时候，zbar这个开源库估计会被不少人选择。但是关于zbar的用法，网上的资料大部分都集中在ZBarReaderViewController这个类的使用上。本人在使用中，发现ZBarReaderViewController这个类使用很不灵活，比如，如果需要对界面做一些自定义的定制时会变得很麻烦。在zbar的头文件中，我发现了ZBarReaderView这个类，直觉告诉我这个类的使用应该是比较灵活。google之后发现针对这个类的使用说明比较少，几乎没有，只能自己动手了，在下载了zbar的源码稍作研究后，终于搞定了ZBarReaderView的用法。</p>
+
+<h2>用法</h2>
+
+<hr />
+
+<p>ZBarReaderView是UIView的子类，所以我们可以将其当做一个view来设置大小并放置到我们自己界面的任何地方。初始化ZBarReaderView的代码如下：</p>
+
+<div class="highlight"><pre><code class="objc"><span class="n">ZBarReaderView</span> <span class="o">*</span><span class="n">readview</span> <span class="o">=</span> <span class="p">[</span><span class="n">ZBarReaderView</span> <span class="n">new</span><span class="p">];</span> <span class="c1">// 初始化</span>
+<span class="n">readview</span><span class="p">.</span><span class="n">frame</span> <span class="o">=</span> <span class="n">CGRectMake</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">320</span><span class="p">,</span> <span class="mi">460</span><span class="p">);</span>  <span class="c1">// 改变frame</span>
+<span class="n">readview</span><span class="p">.</span><span class="n">readerDelegate</span> <span class="o">=</span> <span class="n">self</span><span class="p">;</span>       <span class="c1">// 设置delegate</span>
+<span class="n">readview</span><span class="p">.</span><span class="n">allowsPinchZoom</span> <span class="o">=</span> <span class="nb">NO</span><span class="p">;</span>       <span class="c1">// 不使用Pinch手势变焦</span>
+<span class="p">[</span><span class="n">self</span><span class="p">.</span><span class="n">view</span> <span class="n">addSubview</span><span class="o">:</span><span class="n">readview</span><span class="p">];</span>    
+</code></pre></div>
+
+
+<p>其中第四行的默认值是YES。使用ZBarReaderView的类要实现  <em>ZBarReaderViewDelegate</em>代理。</p>
+
+<p>添加上述代码后，只是将ZBarReaderView添加到了我们的控制器视图中，摄像头并没有启动，readview也不会显示视频流。ZBarReaderView中有两个方法可以很方便的开启和关闭摄像头。</p>
+
+<div class="highlight"><pre><code class="objc"><span class="p">[</span><span class="n">readview</span> <span class="n">start</span><span class="p">];</span>    <span class="c1">// 开始扫描</span>
+<span class="p">[</span><span class="n">readview</span> <span class="n">stop</span><span class="p">];</span>    <span class="c1">// 停止扫描</span>
+</code></pre></div>
+
+
+<p>你可以在需要的时候调用这两个方法来控制摄像头的开启和关闭。这样，如果摄像头在开启状态并且扫描到二维码或者条形码以后，<em>ZBarReaderViewDelegate</em>的以下代理函数就会被调用。并可以在其中做一些处理。</p>
+
+<div class="highlight"><pre><code class="objc"><span class="k">-</span> <span class="p">(</span><span class="kt">void</span><span class="p">)</span><span class="nf">readerView:</span><span class="p">(</span><span class="n">ZBarReaderView</span> <span class="o">*</span><span class="p">)</span><span class="nv">readerView</span> <span class="nf">didReadSymbols:</span><span class="p">(</span><span class="n">ZBarSymbolSet</span> <span class="o">*</span><span class="p">)</span><span class="nv">symbols</span> <span class="nf">fromImage:</span><span class="p">(</span><span class="n">UIImage</span> <span class="o">*</span><span class="p">)</span><span class="nv">image</span><span class="p">{</span>
+    <span class="c1">// 得到扫描的条码内容</span>
+    <span class="k">const</span> <span class="kt">zbar_symbol_t</span> <span class="o">*</span><span class="n">symbol</span> <span class="o">=</span> <span class="n">zbar_symbol_set_first_symbol</span><span class="p">(</span><span class="n">symbols</span><span class="p">.</span><span class="n">zbarSymbolSet</span><span class="p">);</span>
+    <span class="n">NSString</span> <span class="o">*</span><span class="n">symbolStr</span> <span class="o">=</span> <span class="p">[</span><span class="n">NSString</span> <span class="n">stringWithUTF8String</span><span class="o">:</span> <span class="n">zbar_symbol_get_data</span><span class="p">(</span><span class="n">symbol</span><span class="p">)];</span>
+    
+    
+    <span class="k">if</span> <span class="p">(</span><span class="n">zbar_symbol_get_type</span><span class="p">(</span><span class="n">symbol</span><span class="p">)</span> <span class="o">==</span> <span class="n">ZBAR_QRCODE</span><span class="p">)</span> <span class="p">{</span>  <span class="c1">// 是否QR二维码</span>
+    <span class="p">}</span>
+
+<span class="p">}</span>
+</code></pre></div>
+
+
+<p>你可能已经注意到<em>ZBarReaderViewDelegate</em>代理函数中的fromImage:(UIImage *)image这个参数了。没错，ZBarReaderView可以调用摄像头来完成拍照功能。你需要按以下方法调用。</p>
+
+<div class="highlight"><pre><code class="objc"><span class="p">[</span><span class="n">readview</span><span class="p">.</span><span class="n">captureReader</span> <span class="n">captureFrame</span><span class="p">];</span>
+</code></pre></div>
+
+
+<p>上述代码执行后，<em>ZBarReaderViewDelegate</em>的代理函数同样会被调用，其中的fromImage:(UIImage *)image就是方法调用时摄像头捕获的图像。</p>
+
+<h2>总结</h2>
+
+<hr />
+
+<p>我本身对zbar这个开源的库也没有做深入研究，只是在实际使用中总结了一些用法。有感于这方面的资料比较少，特此做一个总结。</p>
+
+</section>
+<section class="meta">
+
+<br/>
+<br/>
+<span>
+	<a  href="http://webfrogs.github.com/2012/12/22/2012-year-end-wrap/" class="pageNav"  >Previous</a>
+	&nbsp;&nbsp;&nbsp;
+	<a  href="http://webfrogs.github.com/2012/12/28/ubuntu-arduino-ide/" class="pageNav"  >Next</a>
+</span>
+<hr>
+<span class="author">
+  <a href="http://webfrogs.github.com">webfrogs</a>
+</span>
+<span class="time">
+  /
+  <time datetime="2012-12-26">2012-12-26</time>
+</span>
+<br />
+<span class="license">
+  Published under <a rel="license" href="http://creativecommons.org/licenses/by-nc-sa/3.0/">(CC) BY-NC-SA</a>
+</span>
+
+<span class="categories">
+  in categories
+  
+  <a href="/categories/#ios" title="ios">ios</a>&nbsp;
+  
+</span>
+
+
+<span class="tags">
+  tagged with 
+  
+  <a href="/tags/#iOS" title="iOS">iOS</a>&nbsp;
+  
+  <a href="/tags/#Zbar" title="Zbar">Zbar</a>&nbsp;
+  
+</span>
+
+</section>
+<!-- Duoshuo Comment BEGIN -->
+	<div class="ds-thread"></div>
+	<script type="text/javascript">
+	var duoshuoQuery = {short_name:"webfrogs"};
+	(function() {
+		var ds = document.createElement('script');
+		ds.type = 'text/javascript';ds.async = true;
+		ds.src = 'http://static.duoshuo.com/embed.js';
+		ds.charset = 'UTF-8';
+		(document.getElementsByTagName('head')[0] 
+		|| document.getElementsByTagName('body')[0]).appendChild(ds);
+	})();
+	</script>
+<!-- Duoshuo Comment END -->
+<!--
+<script type="text/javascript">
+$(function(){
+  $(document).keydown(function(e) {
+    var url = false;
+        if (e.which == 37 || e.which == 74) {  // Left arrow and J
+            
+        url = 'http://webfrogs.github.com/2012/12/22/2012-year-end-wrap/';
+        
+        }
+        else if (e.which == 39 || e.which == 75) {  // Right arrow and K
+            
+        url = 'http://webfrogs.github.com/2012/12/28/ubuntu-arduino-ide/';
+        
+        }
+        if (url) {
+            window.location = url;
+        }
+  });
+})
+</script>
+-->
+
+
+        </article>
+      </div>
+
+    <footer>
+        <p><small>Powered by <a href="https://github.com/mojombo/jekyll">Jekyll</a> & <a href="http://pages.github.com">GitHub</a> | Copyright 2012 - 2013 by <a href="/about/">webfrogs</a> | <span class="label label-info" id="timeSpan"></span></small></p>
+    </footer>
+
+    </div>
+
+    <script type="text/javascript">
+      var _gaq = _gaq || [];
+      _gaq.push(['_setAccount', 'UA-34960818-1']);
+      _gaq.push(['_trackPageview']);
+      (function() {
+        var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+        ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+        var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+      })();
+    </script>
+
+    <!-- Baidu Button BEGIN -->
+		<script type="text/javascript" id="bdshare_js" data="type=slide&amp;img=4&amp;pos=right&amp;uid=541841" ></script>
+		<script type="text/javascript" id="bdshell_js"></script>
+		<script type="text/javascript">
+		var bds_config={"bdTop":170};
+		document.getElementById("bdshell_js").src = "http://bdimg.share.baidu.com/static/js/shell_v2.js?cdnversion=" + Math.ceil(new Date()/3600000);
+		</script>
+		<!-- Baidu Button END -->
+  </body>
+</html>
