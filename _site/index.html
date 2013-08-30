@@ -1,234 +1,332 @@
+
 <!DOCTYPE html>
-<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en-us">
+<html lang="en">
   <head>
-    <meta http-equiv="content-type" content="text/html; charset=utf-8" />
-    <meta name="author" content="webfrogs" />
-    <title>webfrogs' Homepage | webfrogs</title>
-    <link rel="shortcut icon" href="/favicon.ico">
-    <link href="/feed/" rel="alternate" title="webfrogs" type="application/atom+xml" />
-    <link rel="stylesheet" href="/media/css/style.css">
-    <link rel="stylesheet" href="/media/css/highlight.css">
-    <script type="text/javascript" src="/media/js/jquery-1.7.1.min.js"></script>
+    <meta charset="utf-8">
+    <title>Zhenyu's Blog</title>
+    <meta name="description" content="张振宇的博客">
+    <meta name="author" content="张振宇">
+
+    <!-- Le HTML5 shim, for IE6-8 support of HTML elements -->
+    <!--[if lt IE 9]>
+      <script src="http://html5shim.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+
+    <!-- Le styles -->
+    <link href="/assets/themes/abel/bootstrap/css/bootstrap.min.css" rel="stylesheet">
+    <link href="/assets/themes/abel/css/style.css?body=1" rel="stylesheet" type="text/css" media="all">
+    <link href="/assets/themes/abel/css/pygments.css?body=1" rel="stylesheet" type="text/css" media="all">    
+
+	<link rel="shortcut icon" href="assets/image/favicon.ico">
+    <!-- Le fav and touch icons -->
+  <!-- Update these with your own images
+    <link rel="shortcut icon" href="images/favicon.ico">
+    <link rel="apple-touch-icon" href="images/apple-touch-icon.png">
+    <link rel="apple-touch-icon" sizes="72x72" href="images/apple-touch-icon-72x72.png">
+    <link rel="apple-touch-icon" sizes="114x114" href="images/apple-touch-icon-114x114.png">
+  -->
+  	 <link id="RSSLink" title="RSS" type="application/rss+xml" rel="alternate" href="/atom.xml" />
+
+  	 
+  	 
   </head>
-  <script type="text/javascript">
-    function setTimeSpan(){
-    	var date = new Date();
-    	timeSpan.innerText=date.format('yyyy-MM-dd hh:mm:ss');
-    }
-    
-    Date.prototype.format = function(format)
-		{
-    var o =
-    	{
-    	    "M+" : this.getMonth()+1, //month
-    	    "d+" : this.getDate(),    //day
-    	    "h+" : this.getHours(),   //hour
-    	    "m+" : this.getMinutes(), //minute
-    	    "s+" : this.getSeconds(), //second
-    	    "q+" : Math.floor((this.getMonth()+3)/3),  //quarter
-    	    "S" : this.getMilliseconds() //millisecond
-    	}
-    	if(/(y+)/.test(format))
-    	format=format.replace(RegExp.$1,(this.getFullYear()+"").substr(4 - RegExp.$1.length));
-    	for(var k in o)
-    	if(new RegExp("("+ k +")").test(format))
-    	format = format.replace(RegExp.$1,RegExp.$1.length==1 ? o[k] : ("00"+ o[k]).substr((""+ o[k]).length));
-    	return format;
-		}
-  </script>
-  <body onLoad="setInterval(setTimeSpan,1000);">
-    <div id="container">
-      <div id="main" role="main">
-        <header>
-        <h1>webfrogs' Homepage</h1>
-        </header>
-        <nav>
-        <span><a title="home page" class="" href="/">Home</a></span>
-        <span><a title="about" class="" href="/about/">About</a></span>
-        <span><a title="guestbook" class="" href="/guestbook/">Guestbook</a></span>
-        <span><a title="categories" class="" href="/categories/">Categories</a></span>
-        <span><a title="tags" class="" href="/tags/">Tags</a></span>
-        <span><a title="links" class="" href="/links/">Links</a></span>
-        <span><a title="subscribe by RSS" class="" href="/feed/">Subscribe</a></span>
-        </nav>
-        <article class="content">
-        <section class="post">
-<ul class="listing">
+
+  <body>
+
+    <div class="navbar">
+      <div class="navbar-inner">
+        <div class="container">
+          <a class="brand" href="/">Zhenyu's Blog</a>
+          <ul class="nav">
+            
+            
+            
+
 
   
-  
-    
-    <li class="listing-seperator">2013</li>
-  
-  <li class="listing-item">
-    <time datetime="2013-07-18">2013-07-18</time>
-    <a href="/2013/07/18/low-level_concurrency_apis/" title="Objc的底层并发API">Objc的底层并发API</a>
-  </li>
-
-  
-  
-  <li class="listing-item">
-    <time datetime="2013-05-22">2013-05-22</time>
-    <a href="/2013/05/22/ios-view-assign-corner-radius/" title="iOS开发之指定UIView的某几个角为圆角">iOS开发之指定UIView的某几个角为圆角</a>
-  </li>
-
-  
-  
-  <li class="listing-item">
-    <time datetime="2013-04-22">2013-04-22</time>
-    <a href="/2013/04/22/build-cocoapods-project/" title="基于CocoaPods的iOS工程自动打包脚本实现">基于CocoaPods的iOS工程自动打包脚本实现</a>
-  </li>
-
-  
-  
-  <li class="listing-item">
-    <time datetime="2013-04-01">2013-04-01</time>
-    <a href="/2013/04/01/ios-singleton/" title="iOS单例的两种实现">iOS单例的两种实现</a>
-  </li>
-
-  
-  
-  <li class="listing-item">
-    <time datetime="2013-03-20">2013-03-20</time>
-    <a href="/2013/03/20/git-submodule/" title="git submodule的使用">git submodule的使用</a>
-  </li>
-
-  
-  
-  <li class="listing-item">
-    <time datetime="2013-03-13">2013-03-13</time>
-    <a href="/2013/03/13/read-note-view/" title="《View Programming Guide for iOS》阅读笔记">《View Programming Guide for iOS》阅读笔记</a>
-  </li>
-
-  
-  
-  <li class="listing-item">
-    <time datetime="2013-03-11">2013-03-11</time>
-    <a href="/2013/03/11/ios-animations/" title="IOS官方文档阅读之动画">IOS官方文档阅读之动画</a>
-  </li>
-
-  
-  
-  <li class="listing-item">
-    <time datetime="2013-02-18">2013-02-18</time>
-    <a href="/2013/02/18/ios-automation/" title="IOS工程自动打包并发布脚本实现">IOS工程自动打包并发布脚本实现</a>
-  </li>
-
-  
-  
-  <li class="listing-item">
-    <time datetime="2013-01-30">2013-01-30</time>
-    <a href="/2013/01/30/ios-custom-keyboard/" title="IOS开发之自定义键盘">IOS开发之自定义键盘</a>
-  </li>
-
-  
-  
-  <li class="listing-item">
-    <time datetime="2013-01-14">2013-01-14</time>
-    <a href="/2013/01/14/ios-problem-solved/" title="IOS开发之细节知识点汇总">IOS开发之细节知识点汇总</a>
-  </li>
-
-  
-  
-  <li class="listing-item">
-    <time datetime="2013-01-09">2013-01-09</time>
-    <a href="/2013/01/09/ios-keyboard-custom-upperview/" title="IOS开发之自定义系统弹出键盘上方的view">IOS开发之自定义系统弹出键盘上方的view</a>
-  </li>
-
-  
-  
-    
-    <li class="listing-seperator">2012</li>
-  
-  <li class="listing-item">
-    <time datetime="2012-12-31">2012-12-31</time>
-    <a href="/2012/12/31/the-end-of-2012/" title="写于2012年最后一个晚上">写于2012年最后一个晚上</a>
-  </li>
-
-  
-  
-  <li class="listing-item">
-    <time datetime="2012-12-28">2012-12-28</time>
-    <a href="/2012/12/28/ubuntu-arduino-ide/" title="解决ubuntu下arduino IDE的Serial Port无法选择问题">解决ubuntu下arduino IDE的Serial Port无法选择问题</a>
-  </li>
-
-  
-  
-  <li class="listing-item">
-    <time datetime="2012-12-26">2012-12-26</time>
-    <a href="/2012/12/26/iphone-use-zbar/" title="IOS开发之ZBarReaderView的使用">IOS开发之ZBarReaderView的使用</a>
-  </li>
-
-  
-  
-  <li class="listing-item">
-    <time datetime="2012-12-22">2012-12-22</time>
-    <a href="/2012/12/22/2012-year-end-wrap/" title="2012年终工作总结">2012年终工作总结</a>
-  </li>
-
-  
-  
-  <li class="listing-item">
-    <time datetime="2012-12-20">2012-12-20</time>
-    <a href="/2012/12/20/use-jekyll/" title="使用jekyll来写博客的一些心得">使用jekyll来写博客的一些心得</a>
-  </li>
-
-</ul>
-
-<div id="post-pagination" class="paginator">
-
-  
-    <span class="previous disabled"><前页</span>
-  
-
-      
-      <span class="current-page">1</span>
-      
-
     
       
-      <a href="/page2">2</a>
+      	
+      	<li><a href="/about.html">About Zhenyu</a></li>
+      	
       
     
+  
+    
+      
+      	
+      	<li><a href="/archive.html">Archive</a></li>
+      	
+      
+    
+  
+    
+      
+    
+  
+    
+      
+      	
+      	<li><a href="/categories.html">Categories</a></li>
+      	
+      
+    
+  
+    
+      
+    
+  
+    
+      
+    
+  
+    
+      
+    
+  
+    
+      
+      	
+      	<li><a href="/tags.html">Tags</a></li>
+      	
+      
+    
+  
+
+
+
+          </ul>
+          <a href="/atom.xml"><img alt="rss feed" src="/assets/image/rss.png"></a>      
+        </div>
+        
+      </div>
+    </div>
+
+    <div class="container">
+
+      <div class="content">
+        
+<div class="page-header">
+  <span class="signature">陌上发花，可以缓缓醉矣， 忍把浮名，换了浅酌低唱。</span>
+</div>
+
+<div class="row">
+  <div class="span12">
+    <table colspan='0' rowspan='0' width='100%'>
+<tr>
+<td width='70%'>
+	<div class='home-page-content'>
+		
+		<div class='home-page-post'>
+			<div class='post-header'>
+				<div class='date'>15 Jun 2013</div>
+				<div class='tags'> 
+					<label>Tags: </label>Java, Java8, and Lambda
+				</div>
+				<div class='category'> 
+					<label>Category: </label>
+					<span>Tech</span>
+				</div>
+			</div>
+			<div class='post-content'>
+				<div class='title'><a href='/blog/2013/06/15/java8-preview-method-reference'>Java 8 预览之Method Reference</a></div>
+				<div class='abstract'><p>既然Lambda表达式相当于匿名函数，那么对于其使用者而言，传给它一个匿名函数还是有名字的函数其实没有区别，只要这个函数满足使用者的规约即可。而且很多时候有名字的函数反而可读性更好并且更利于代码重用。如此说来，Java 8 引入方法引用（Method Reference）也就顺理成章了。</p></div>
+				<div style='float:right;'><a href='/blog/2013/06/15/java8-preview-method-reference'>阅读全文</a></div>
+			</div>
+			
+			<div class='post-footer'>&nbsp;</div>
+			
+		</div>
+		
+		<div class='home-page-post'>
+			<div class='post-header'>
+				<div class='date'>15 Jun 2013</div>
+				<div class='tags'> 
+					<label>Tags: </label>Java, Java8, and Lambda
+				</div>
+				<div class='category'> 
+					<label>Category: </label>
+					<span>Tech</span>
+				</div>
+			</div>
+			<div class='post-content'>
+				<div class='title'><a href='/blog/2013/06/15/java8-preview-functional-interface'>Java 8 预览之Functional Interface</a></div>
+				<div class='abstract'><p>在JDK的类库中，有很多只声明了一个方法的接口，比如<code>java.lang.Iterable&lt;T&gt;</code>和<code>java.lang.Runnable</code>。这些接口被称为单抽象方法接口（Single Abstract Method interfaces），它表达了一种逻辑上的单一功能约定。Java 8为这样的接口引入了一个新概念——函数式接口（<strong>Functional Interface</strong>），同时引入注解<code>@FunctionalInterface</code>以帮助编译器检查函数式接口的合法性。</p></div>
+				<div style='float:right;'><a href='/blog/2013/06/15/java8-preview-functional-interface'>阅读全文</a></div>
+			</div>
+			
+			<div class='post-footer'>&nbsp;</div>
+			
+		</div>
+		
+		<div class='home-page-post'>
+			<div class='post-header'>
+				<div class='date'>13 Jun 2013</div>
+				<div class='tags'> 
+					<label>Tags: </label>Java, Java8, and Lambda
+				</div>
+				<div class='category'> 
+					<label>Category: </label>
+					<span>Tech</span>
+				</div>
+			</div>
+			<div class='post-content'>
+				<div class='title'><a href='/blog/2013/06/13/java8previewdefaultmethod'>Java 8 预览之Default Method</a></div>
+				<div class='abstract'><p>打开JDK 8的源代码，你会发现很多接口中多了一些标记为<strong>default</strong>的方法。在Java的早期版本中，<strong>default</strong>关键字只在swith语句中使用，在方法上使用代表什么含义呢？让我们一起来看一下Java 8新特性：<strong>Default Method</strong></p></div>
+				<div style='float:right;'><a href='/blog/2013/06/13/java8previewdefaultmethod'>阅读全文</a></div>
+			</div>
+			
+			<div class='post-footer'>&nbsp;</div>
+			
+		</div>
+		
+		<div class='home-page-post'>
+			<div class='post-header'>
+				<div class='date'>13 Jun 2013</div>
+				<div class='tags'> 
+					<label>Tags: </label>Java, Java8, and IntelliJ
+				</div>
+				<div class='category'> 
+					<label>Category: </label>
+					<span>Tech</span>
+				</div>
+			</div>
+			<div class='post-content'>
+				<div class='title'><a href='/blog/2013/06/13/intellij-java8-compile-require-target-1-8'>IntelliJ中Java8编译错误-‘source release 8 requires target release 1.8’</a></div>
+				<div class='abstract'><p>在IntelliJ的Java8项目中，尽管已经将Project SDK和Project Launguage Level设置为Java 8，编译测试时仍然会出现编译错误：</p>
+
+<blockquote>
+<p>java: javacTask: source release 8 requires target release 1.8</p>
+</blockquote>
+
+<p>这里列出了两种解决方案&#8230;</p></div>
+				<div style='float:right;'><a href='/blog/2013/06/13/intellij-java8-compile-require-target-1-8'>阅读全文</a></div>
+			</div>
+			
+			<div class='post-footer'>&nbsp;</div>
+			
+		</div>
+		
+		<div class='home-page-post'>
+			<div class='post-header'>
+				<div class='date'>28 Apr 2013</div>
+				<div class='tags'> 
+					<label>Tags: </label>Agile and Testing
+				</div>
+				<div class='category'> 
+					<label>Category: </label>
+					<span>翻译</span>
+				</div>
+			</div>
+			<div class='post-content'>
+				<div class='title'><a href='/blog/2013/04/28/test-pyramid'>测试金字塔（Test Pyramid）</a></div>
+				<div class='abstract'><p>本文翻译自Martin Fowler的著名文章‘Test Pyramid’，详细论述了敏捷测试中的金字塔结构</p></div>
+				<div style='float:right;'><a href='/blog/2013/04/28/test-pyramid'>阅读全文</a></div>
+			</div>
+			
+		</div>
+		
+	</div>
+</td>
+
+<td style='vertical-align:top;' width='30%'>
+	<div class='home-page-sidebar'>
+		<div class='sidebar-title'>文章分类</div>
+		<div>
+			<ul class='tag_box inline'>
+			
+			
+
 
   
-    <a class="next" href="/page2">后页></a>
+     
+    	<li><a href='/categories.html#tech-ref'>
+    		tech <span>10</span>
+    	</a></li>
+     
+    	<li><a href='/categories.html#搭建博客-ref'>
+    		搭建博客 <span>4</span>
+    	</a></li>
+     
+    	<li><a href='/categories.html#自说自话-ref'>
+    		自说自话 <span>2</span>
+    	</a></li>
+     
+    	<li><a href='/categories.html#翻译-ref'>
+    		翻译 <span>1</span>
+    	</a></li>
+    
   
-  (共23篇)
+
+
+			</ul>
+		</div>
+		<br />
+		<div class='sidebar-title'>标签</div>
+		<div>
+			<ul class='tag_box inline'>
+			  
+			
+
+
+  
+     
+    	<li><a href='/tags.html#Clean Code-ref'>Clean Code <span>1</span></a></li>
+     
+    	<li><a href='/tags.html#Agile-ref'>Agile <span>2</span></a></li>
+     
+    	<li><a href='/tags.html#nHibernate-ref'>nHibernate <span>5</span></a></li>
+     
+    	<li><a href='/tags.html#N+1问题-ref'>N+1问题 <span>1</span></a></li>
+     
+    	<li><a href='/tags.html#Mapping By Code-ref'>Mapping By Code <span>4</span></a></li>
+     
+    	<li><a href='/tags.html#Github Pages-ref'>Github Pages <span>3</span></a></li>
+     
+    	<li><a href='/tags.html#Jekyll-ref'>Jekyll <span>4</span></a></li>
+     
+    	<li><a href='/tags.html#Jekyll-Bootstrap-ref'>Jekyll-Bootstrap <span>2</span></a></li>
+     
+    	<li><a href='/tags.html#Pygments-ref'>Pygments <span>1</span></a></li>
+     
+    	<li><a href='/tags.html#SEO-ref'>SEO <span>1</span></a></li>
+     
+    	<li><a href='/tags.html#ThoughtWorks-ref'>ThoughtWorks <span>2</span></a></li>
+     
+    	<li><a href='/tags.html#Testing-ref'>Testing <span>1</span></a></li>
+     
+    	<li><a href='/tags.html#Java-ref'>Java <span>4</span></a></li>
+     
+    	<li><a href='/tags.html#Java8-ref'>Java8 <span>4</span></a></li>
+     
+    	<li><a href='/tags.html#IntelliJ-ref'>IntelliJ <span>1</span></a></li>
+     
+    	<li><a href='/tags.html#Lambda-ref'>Lambda <span>3</span></a></li>
+    
+  
+
+
+
+			</ul>
+		</div>
+	</div>
+</td>
+</tr>
+</table><hr /><div style='width:50%;margin-left:auto;margin-right:auto;text-align:center;clear:both;'>
+	<a href='/archive.html'>查看所有17篇文章...</a>
+</div>
+  </div>
 </div>
 
 
-</section>
-
-
-
-        </article>
       </div>
 
-    <footer>
-        <p><small>Powered by <a href="https://github.com/mojombo/jekyll">Jekyll</a> & <a href="http://pages.github.com">GitHub</a> | Copyright 2012 - 2013 by <a href="/about/">webfrogs</a> | <span class="label label-info" id="timeSpan"></span></small></p>
-    </footer>
+      <footer>
+        <p>&copy; 张振宇 2012 - 版权所有，转载请注明出处</p>
+      </footer>
 
-    </div>
+    </div> <!-- /container -->
 
-    <script type="text/javascript">
-      var _gaq = _gaq || [];
-      _gaq.push(['_setAccount', 'UA-34960818-1']);
-      _gaq.push(['_trackPageview']);
-      (function() {
-        var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
-        ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
-        var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
-      })();
-    </script>
-
-    <!-- Baidu Button BEGIN -->
-		<script type="text/javascript" id="bdshare_js" data="type=slide&amp;img=4&amp;pos=right&amp;uid=541841" ></script>
-		<script type="text/javascript" id="bdshell_js"></script>
-		<script type="text/javascript">
-		var bds_config={"bdTop":170};
-		document.getElementById("bdshell_js").src = "http://bdimg.share.baidu.com/static/js/shell_v2.js?cdnversion=" + Math.ceil(new Date()/3600000);
-		</script>
-		<!-- Baidu Button END -->
   </body>
 </html>
+
