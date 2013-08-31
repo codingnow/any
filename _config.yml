@@ -15,7 +15,7 @@ permalinks: /posts/:year/:month/:day/:title/
 # Themes are encouraged to use these universal variables
 # so be sure to set them if your theme uses them.
 #
-title: Jason's Tech Blog
+title: Caiqh's Tech Blog
 tagline:
 author:
   name: Jason L. West Sr.
@@ -32,7 +32,7 @@ author:
 # Else if you are pushing to usersname.github.com, replace with your usersname.
 # Finally if you are pushing to a GitHub project page, include the project name at the end.
 #
-production_url: http://codingnow.github.io/carl
+production_url: http://codingnow.github.io/any
 
 # All Jekyll-Bootstrap specific configurations are namespaced into this hash
 #
@@ -61,7 +61,7 @@ JB :
   #   - Only the following values are falsy: ["", null, false]
   #   - When setting BASE_PATH it must be a valid url.
   #     This means always setting the protocol (http|https) or prefixing with "/"
-  BASE_PATH : /carl
+  BASE_PATH : /any
 
   # By default, the asset_path is automatically defined relative to BASE_PATH plus the enabled theme.
   # ex: [BASE_PATH]/assets/themes/[THEME-NAME]
