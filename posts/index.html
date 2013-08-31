@@ -7,7 +7,7 @@ full_posts: 10
 
 {% for post in site.posts %}
   {% if forloop.index < page.full_posts %}
-  <h2><a href="{{ post.url }}">{{ post.title }}</a></h2>
+  <h2><a href="{{ BASE_PATH }}{{ post.url }}">{{ post.title }}</a></h2>
   <div class="date"><span>Posted on: {{ post.date | date: "%B %d, %Y" }}</span></div>
   <div class="row">&nbsp;</div>
 
