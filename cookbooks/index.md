@@ -6,11 +6,11 @@ description: "Programming Cookbooks"
 ---
 {% include JB/setup %}
 
-### [ColdFusion](/cookbooks/coldfusion/)
+### [ColdFusion](/any/cookbooks/coldfusion/)
 
-### [Java JSP/Servlet](/cookbooks/javaJspServlet/)
+### [Java JSP/Servlet](/any/cookbooks/javaJspServlet/)
 
-### [Ruby](/cookbooks/ruby/)
+### [Ruby](/any/cookbooks/ruby/)
 
 **Cookbook Change Log**
 
